@@ -1,0 +1,85 @@
+syntax = "proto3";
+
+package org.cloud.mq.meta.api;
+
+option java_multiple_files = true;
+option java_package = "org.cloud.mq.meta.raft";
+option java_outer_classname = "MetaRaftProto";
+
+service RaftServerService {
+  // vote
+  rpc requestVote(RaftVoteReq)
+      returns(RaftVoteRes) {}
+
+  // log append
+  rpc appendEntries(stream AppendLogReq)
+      returns(stream AppendLogRes) {}
+
+  // read log
+  rpc readIndex(ReadIndexReq)
+      returns(ReadIndexRes) {}
+}
+
+// vote request
+message RaftVoteReq {
+  // vote for who
+  int32 leaderId = 1;
+  // leader term
+  int32 term = 2;
+  // log index
+  int64 logIndex = 3;
+}
+
+// vote response
+message RaftVoteRes {
+  enum Result{
+    ACCEPT = 0;
+    REJECT = 1;
+    TERM_EXPIRE = 2;
+    UNKNOWN = 3;
+  }
+  Result result = 1;
+  // term expire
+  int32 leaderId = 2;
+  int64 term = 3;
+}
+
+// log append request
+message AppendLogReq {
+  // data
+  bytes logData = 1;
+  // from who
+  int32 leaderId = 2;
+  // leader term
+  int32 term = 3;
+  // log index
+  int64 logIndex = 4;
+}
+
+// log append response
+message AppendLogRes {
+  enum AppendResult {
+    SUCCESS = 0;
+    NOT_LEADER = 1; // the requester's term is not large enough
+    INCONSISTENCY = 2; // gap between the local log and the entries or snapshot installation in progress or
+    // overlap between local snapshot and the entries
+  }
+  uint32 term = 1;
+  uint64 nextIndex = 2;
+  AppendResult result = 3;
+  uint32 leaderId = 4;
+}
+
+// read log index request
+message ReadIndexReq {
+   uint64 term = 1;
+   uint64 startIndex = 2;
+   string fromHost = 3;
+}
+
+// read log index response
+message ReadIndexRes {
+  bool success = 1;
+  repeated bytes logDates = 2;
+  uint64 nextIndex = 3;
+}

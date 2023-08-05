@@ -1,0 +1,56 @@
+# broker filter page input param
+input BrokerFilter {
+    name : String
+    ip : String
+    status: String
+    pageNo : Int!
+    pageSize : Int!
+}
+
+# broker page result
+type BrokerPage {
+    pageNo : Int!
+    pageSize : Int!
+    brokers : [Broker]
+}
+
+input BrokerOnlineReq {
+    id : ID!
+    name : String!
+    cluster: String!
+    ip : String!
+    domain: String!
+    cpu : String
+    memory: String
+    status: BrokerStatus!
+}
+
+# broker data type
+type Broker {
+    id : ID!
+    name : String!
+    cluster: String!
+    ip : String!
+    domain: String!
+    cpu : String
+    memory: String
+    status: BrokerStatus!
+}
+
+# broker status enum
+enum BrokerStatus {
+    ACTIVE
+    DATA_MIGRATION
+    DOWN
+}
+
+# when the broker transfer data, this data can be get
+type BrokerDataMigrationProgress {
+    id : ID!
+    name : String!
+    cluster: String!
+    totalMessages: Int!
+    totalTopics: Int!
+    migratedMessages: Int!
+    migratedTopics: Int!
+}

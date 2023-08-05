@@ -1,0 +1,31 @@
+syntax = "proto3";
+
+package org.cloud.mq.meta.api;
+
+option java_multiple_files = true;
+option java_package = "org.cloud.mq.meta.api";
+option java_outer_classname = "MetaBrokerProto";
+
+// The greeting service definition.
+service MetaBrokerService {
+  // Sends a greeting
+  rpc BrokerRegister (BrokerRegisterRequest) returns (BrokerRegisterReply) {
+  }
+}
+
+// The request message containing the user's name.
+message BrokerRegisterRequest {
+    int32 id = 1;
+    string name = 2;
+    string Cluster = 3;
+    string ip = 4;
+    string domain = 5;
+    string cpu = 6;
+    string memory = 7;
+    string status = 8;
+}
+
+// The response message containing the greetings
+message BrokerRegisterReply {
+  bool success = 1;
+}

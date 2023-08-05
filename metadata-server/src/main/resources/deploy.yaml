@@ -1,0 +1,154 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    app.quarkus.io/build-timestamp: 2023-08-03 - 12:46:36 +0000
+  labels:
+    app.kubernetes.io/name: metadata-server
+    app.kubernetes.io/version: 1.0.0-SNAPSHOT
+    app.kubernetes.io/managed-by: quarkus
+  name: metadata-server
+  namespace: nativemq
+spec:
+  ports:
+    - name: http
+      port: 80
+      protocol: TCP
+      targetPort: 8081
+    - name: debug
+      port: 5006
+      protocol: TCP
+      targetPort: 5006
+    - name: grpc
+      port: 9100
+      protocol: TCP
+      targetPort: 9100
+  clusterIP: None
+  selector:
+    app.kubernetes.io/name: metadata-server
+    app.kubernetes.io/version: 1.0.0-SNAPSHOT
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  annotations:
+    app.quarkus.io/build-timestamp: 2023-08-03 - 12:46:36 +0000
+  labels:
+    app.kubernetes.io/managed-by: quarkus
+    app.kubernetes.io/name: metadata-server
+    app.kubernetes.io/version: 1.0.0-SNAPSHOT
+  name: metadata-server
+  namespace: nativemq
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: metadata-server
+      app.kubernetes.io/version: 1.0.0-SNAPSHOT
+  serviceName: metadata-server
+  template:
+    metadata:
+      annotations:
+        app.quarkus.io/build-timestamp: 2023-08-03 - 12:46:36 +0000
+      labels:
+        app.kubernetes.io/managed-by: quarkus
+        app.kubernetes.io/name: metadata-server
+        app.kubernetes.io/version: 1.0.0-SNAPSHOT
+      namespace: nativemq
+    spec:
+      containers:
+        - env:
+            - name: QUARKUS_KUBERNETES_MOUNTS__METADATA_LOG_PVC__PATH
+              value: /metadata/log/
+            - name: JAVA_TOOL_OPTIONS
+              value: "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5006"
+          image: nativemq/metadata-server:1.0.0-SNAPSHOT
+          imagePullPolicy: IfNotPresent
+          livenessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /q/health/live
+              port: 8081
+              scheme: HTTP
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 10
+          name: metadata-server
+          ports:
+            - containerPort: 8081
+              name: http
+              protocol: TCP
+            - containerPort: 5006
+              name: debug
+              protocol: TCP
+            - containerPort: 9100
+              name: grpc
+              protocol: TCP
+          readinessProbe:
+            failureThreshold: 3
+            grpc:
+              port: 9100
+              service: metadata-server
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 10
+          resources:
+            limits:
+              cpu: 1000m
+              memory: 512Mi
+            requests:
+              cpu: 250m
+              memory: 64Mi
+          startupProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /q/health/started
+              port: 8081
+              scheme: HTTP
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 10
+          volumeMounts:
+            - mountPath: /metadata/log/
+              name: metadata-log-pvc
+              readOnly: false
+      terminationGracePeriodSeconds: 10
+      volumes:
+        - name: metadata-log-pvc
+          persistentVolumeClaim:
+            claimName: metadata-log-pvc
+            readOnly: false
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: metadata-log-pv
+  namespace: nativemq
+spec:
+  capacity:
+    storage: 1Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  hostPath:
+    path: /tmp/nativemq
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: metadata-log-pvc
+  namespace: nativemq
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 300m
+  selector:
+    matchLabels:
+      pv-name: metadata-log-pv
+---
