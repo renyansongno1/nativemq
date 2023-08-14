@@ -1,10 +1,7 @@
 package org.cloud.mq.meta.server.raft.peer;
 
 import com.google.common.collect.Lists;
-import io.quarkus.runtime.Startup;
-import io.quarkus.runtime.annotations.RegisterForReflection;
 import io.quarkus.scheduler.Scheduled;
-import io.smallrye.common.annotation.RunOnVirtualThread;
 import jakarta.enterprise.context.ApplicationScoped;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
@@ -25,7 +22,6 @@ import java.util.concurrent.CopyOnWriteArraySet;
  */
 @ApplicationScoped
 @Slf4j
-@RegisterForReflection
 public class PeerFinder {
 
     private static final CopyOnWriteArraySet<String> PEER_HOST_SET = new CopyOnWriteArraySet<>();
@@ -33,12 +29,10 @@ public class PeerFinder {
     private static final String DOMAIN = "metadata-server.nativemq.svc.cluster.local";
 
     @Scheduled(every="10s")
-    @RunOnVirtualThread
     public void refreshPeer() {
         findPeer();
     }
 
-    @Startup
     public void findPeer() {
         if (log.isDebugEnabled()) {
             log.debug("find SRV:{} all domain service, current thread:{}", DOMAIN, Thread.currentThread().getName());

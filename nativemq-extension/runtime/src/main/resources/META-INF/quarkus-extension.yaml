@@ -1,8 +1,8 @@
 name: Nativemq Extension
-#description: Do something useful.
+description: nativemq
 metadata:
-#  keywords:
-#    - nativemq-extension
+ keywords:
+   - nativemq-extension
 #  guide: ... # To create and publish this guide, see https://github.com/quarkiverse/quarkiverse/wiki#documenting-your-extension
 #  categories:
 #    - "miscellaneous"

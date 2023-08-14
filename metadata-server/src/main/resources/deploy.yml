@@ -46,6 +46,7 @@ spec:
     matchLabels:
       app.kubernetes.io/name: metadata-server
       app.kubernetes.io/version: 1.0.0-SNAPSHOT
+      app.kubernetes.io/managed-by: quarkus
   serviceName: metadata-server
   template:
     metadata:
