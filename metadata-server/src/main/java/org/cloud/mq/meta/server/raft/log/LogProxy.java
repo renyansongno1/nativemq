@@ -6,10 +6,12 @@ import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import jakarta.enterprise.context.ApplicationScoped;
 import lombok.extern.slf4j.Slf4j;
+import org.cloud.mq.meta.server.raft.common.RaftUtils;
 import org.cloud.mq.meta.server.raft.log.exception.LogProxyException;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.rocksdb.*;
 
+import java.io.File;
 import java.io.IOException;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Path;
@@ -33,8 +35,16 @@ public class LogProxy {
 
     @PostConstruct
     public void init() throws Exception{
-        // RocksDB.loadLibrary();
-
+        logMountPath += RaftUtils.getIdByHost(null);
+        log.info("rocksdb log path:{}", logMountPath);
+        File file = new File(logMountPath);
+        if (!file.exists()) {
+            boolean mkdirs = file.mkdirs();
+            if (!mkdirs) {
+                log.error("mkdir log path for:{} fail", logMountPath);
+                return;
+            }
+        }
         Options options = new Options();
         options.setCreateIfMissing(true);
         options.setWalRecoveryMode(WALRecoveryMode.AbsoluteConsistency);
@@ -43,14 +53,8 @@ public class LogProxy {
     }
 
     @PreDestroy
-    public void destroy() throws Exception {
+    public void destroy() {
         if (rocksDb != null) {
-            try (FlushOptions flushOptions = new FlushOptions()) {
-                flushOptions.setWaitForFlush(true);
-                flushOptions.setAllowWriteStall(false);
-                rocksDb.flush(flushOptions);
-            }
-            rocksDb.flushWal(true);
             rocksDb.close();
         }
     }

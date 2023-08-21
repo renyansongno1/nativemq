@@ -76,7 +76,7 @@ public class PeerFinder {
     public List<String> getOtherPeer() {
         String hostname = System.getenv("HOSTNAME");
         ArrayList<String> list = Lists.newArrayList(PEER_HOST_SET);
-        list.remove(hostname);
+        list.stream().filter(peer -> peer.contains(hostname)).map(peer -> hostname).forEach(list::remove);
         return list;
     }
 

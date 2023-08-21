@@ -46,7 +46,7 @@ public class RaftClient {
             ManagedChannel channel = ManagedChannelBuilder.forAddress(peer, serverPort)
                     .usePlaintext()
                     .build();
-            int id = RaftUtils.getIdByHost(peer);
+            int id = RaftUtils.getIdByHost(null);
             idChannelMapping.put(id, channel);
             channels.add(channel);
             mapping.put(channel, peer);
