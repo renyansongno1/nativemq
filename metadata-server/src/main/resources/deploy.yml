@@ -100,11 +100,18 @@ spec:
               name: metadata-log-pvc
               readOnly: false
       terminationGracePeriodSeconds: 10
-      volumes:
-        - name: metadata-log-pvc
-          persistentVolumeClaim:
-            claimName: metadata-log-pvc
-            readOnly: false
+  volumeClaimTemplates:
+    - metadata:
+        name: metadata-log-pvc
+      spec:
+        accessModes:
+          - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: 300m
+        selector:
+          matchLabels:
+            pv-name: metadata-log-pv
 ---
 apiVersion: v1
 kind: PersistentVolume
@@ -119,19 +126,4 @@ spec:
   persistentVolumeReclaimPolicy: Retain
   hostPath:
     path: /tmp/nativemq
----
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: metadata-log-pvc
-  namespace: nativemq
-spec:
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: 300m
-  selector:
-    matchLabels:
-      pv-name: metadata-log-pv
 ---

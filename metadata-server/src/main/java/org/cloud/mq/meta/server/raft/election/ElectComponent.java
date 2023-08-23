@@ -1,5 +1,9 @@
 package org.cloud.mq.meta.server.raft.election;
 
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonSerializationContext;
+import com.google.gson.JsonSerializer;
 import com.google.protobuf.ByteString;
 import io.grpc.ManagedChannel;
 import io.grpc.stub.StreamObserver;
@@ -10,6 +14,7 @@ import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.cloud.mq.meta.raft.*;
 import org.cloud.mq.meta.server.raft.common.RaftUtils;
@@ -17,6 +22,7 @@ import org.cloud.mq.meta.server.raft.log.LogProxy;
 import org.cloud.mq.meta.server.raft.client.RaftClient;
 import org.cloud.mq.meta.server.raft.peer.PeerWaterMark;
 
+import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
@@ -29,7 +35,8 @@ import java.util.concurrent.TimeUnit;
 @ApplicationScoped
 @Startup
 @Slf4j
-public class ElectComponent {
+@Getter
+public class ElectComponent implements JsonSerializer<ElectComponent> {
 
     /**
      * vote min interval
@@ -57,16 +64,16 @@ public class ElectComponent {
     private static final String HEARTBEAT_LISTEN_SCHEDULER = "heartbeat_listen_scheduler";
 
     @Inject
-    RaftClient raftClient;
+    transient RaftClient raftClient;
 
     @Inject
-    LogProxy logProxy;
+    transient LogProxy logProxy;
 
     @Inject
-    Scheduler scheduler;
+    transient Scheduler scheduler;
 
     @Inject
-    PeerWaterMark peerWaterMark;
+    transient PeerWaterMark peerWaterMark;
 
     /**
      * now term
@@ -382,5 +389,18 @@ public class ElectComponent {
     @PreDestroy
     public void destroy() {
         scheduler.unscheduleJob(HEARTBEAT_SCHEDULER);
+    }
+
+    @Override
+    public JsonElement serialize(ElectComponent src, Type typeOfSrc, JsonSerializationContext context) {
+        if (log.isDebugEnabled()) {
+            log.debug("elect json serialize");
+        }
+        JsonObject jsonObject = new JsonObject();
+        jsonObject.addProperty("term", src.getTerm());
+        jsonObject.addProperty("leaderId", src.getLeaderId());
+        jsonObject.addProperty("myId", src.getMyId());
+        jsonObject.addProperty("lastLeaderHeartbeatTime", src.getLastLeaderHeartbeatTime());
+        return jsonObject;
     }
 }

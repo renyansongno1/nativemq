@@ -10,10 +10,7 @@ import javax.naming.Context;
 import javax.naming.NamingException;
 import javax.naming.directory.InitialDirContext;
 import javax.naming.directory.Attributes;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Hashtable;
-import java.util.List;
+import java.util.*;
 import java.util.concurrent.CopyOnWriteArraySet;
 
 /**
@@ -76,7 +73,7 @@ public class PeerFinder {
     public List<String> getOtherPeer() {
         String hostname = System.getenv("HOSTNAME");
         ArrayList<String> list = Lists.newArrayList(PEER_HOST_SET);
-        list.stream().filter(peer -> peer.contains(hostname)).map(peer -> hostname).forEach(list::remove);
+        list.removeIf(s -> s.startsWith(hostname));
         return list;
     }
 

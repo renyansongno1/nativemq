@@ -1,22 +1,26 @@
 package org.cloud.mq.meta.server.raft.client;
 
+import com.google.gson.Gson;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.quarkus.scheduler.Scheduled;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import lombok.extern.slf4j.Slf4j;
 import org.cloud.mq.meta.server.raft.common.RaftUtils;
 import org.cloud.mq.meta.server.raft.peer.PeerFinder;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 /**
  * raft client
  * @author renyansong
  */
 @ApplicationScoped
+@Slf4j
 public class RaftClient {
 
     @ConfigProperty(name = "quarkus.grpc.server.port")
@@ -36,6 +40,8 @@ public class RaftClient {
 
     private final Set<String> cachedPeer = new HashSet<>();
 
+    private static final Gson GSON = new Gson();
+
     @Scheduled(every="5s")
     public void refreshChannel() {
         for (String peer : peerFinder.getOtherPeer()) {
@@ -51,6 +57,9 @@ public class RaftClient {
             channels.add(channel);
             mapping.put(channel, peer);
             cachedPeer.add(peer);
+        }
+        if (log.isDebugEnabled()) {
+            log.debug("all channel is :{}", GSON.toJson(channels.stream().map(ManagedChannel::toString).collect(Collectors.toList())));
         }
     }
 
