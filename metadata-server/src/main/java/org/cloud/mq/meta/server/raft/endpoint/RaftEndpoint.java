@@ -18,6 +18,10 @@ public class RaftEndpoint {
     @Inject
     ElectComponent electComponent;
 
+    /**
+     * status
+     * @return res
+     */
     @GET
     public Uni<ElectComponent> getElectStatus() {
         if (log.isDebugEnabled()) {

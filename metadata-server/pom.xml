@@ -168,6 +168,7 @@
                 <version>${compiler-plugin.version}</version>
                 <configuration>
                     <compilerArgs>
+                        <arg>--enable-preview</arg>
                         <arg>-parameters</arg>
                     </compilerArgs>
                 </configuration>
@@ -180,6 +181,7 @@
                     <systemPropertyVariables>
                         <java.util.logging.manager>org.jboss.logmanager.LogManager</java.util.logging.manager>
                     </systemPropertyVariables>
+                    <argLine>--enable-preview -Djdk.tracePinnedThreads</argLine>
                 </configuration>
             </plugin>
             <plugin>

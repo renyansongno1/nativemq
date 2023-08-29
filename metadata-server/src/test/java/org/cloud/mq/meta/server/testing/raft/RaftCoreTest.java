@@ -1,6 +1,7 @@
 package org.cloud.mq.meta.server.testing.raft;
 
 import com.google.common.collect.Lists;
+import com.google.protobuf.ByteString;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.stub.StreamObserver;
@@ -12,7 +13,9 @@ import org.cloud.mq.meta.raft.AppendLogReq;
 import org.cloud.mq.meta.raft.AppendLogRes;
 import org.cloud.mq.meta.raft.RaftVoteRes;
 import org.cloud.mq.meta.server.raft.client.RaftClient;
+import org.cloud.mq.meta.server.raft.common.RaftUtils;
 import org.cloud.mq.meta.server.raft.election.ElectState;
+import org.cloud.mq.meta.server.raft.election.heartbeat.HeartbeatComponent;
 import org.cloud.mq.meta.server.raft.election.heartbeat.HeartbeatStreamObserver;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -47,6 +50,9 @@ public class RaftCoreTest {
 
     @Inject
     HeartbeatStreamObserver heartbeatStreamObserver;
+
+    @Inject
+    HeartbeatComponent heartbeatComponent;
 
     @BeforeEach
     void beforeRaftTest() {
@@ -95,7 +101,7 @@ public class RaftCoreTest {
     @Test
     void heartbeatSuccessTest() {
         // null impl msg sender
-        StreamObserver<AppendLogReq> appendLogReqStreamObserver = new StreamObserver<AppendLogReq>() {
+        StreamObserver<AppendLogReq> appendLogReqStreamObserver = new StreamObserver<>() {
             @Override
             public void onNext(AppendLogReq appendLogReq) {
             }
@@ -114,10 +120,17 @@ public class RaftCoreTest {
         // vote first
         voteSuccessTest();
         // heartbeat test
-        heartbeatStreamObserver.onNext(AppendLogRes.newBuilder()
+        AppendLogRes appendLogRes = AppendLogRes.newBuilder()
                 .setResult(AppendLogRes.AppendResult.SUCCESS)
                 .setMyId(1)
+                .build();
+        heartbeatComponent.heartbeat(AppendLogReq.newBuilder()
+                .setLeaderId(RaftUtils.getIdByHost(null))
+                .setLogIndex(0)
+                .setTerm(electState.getTerm().get())
+                .setLogData(ByteString.copyFrom(new byte[]{}))
                 .build());
+        heartbeatStreamObserver.onNext(appendLogRes);
         assertThat(electState.getLeaderId()).isEqualTo(0);
     }
 
