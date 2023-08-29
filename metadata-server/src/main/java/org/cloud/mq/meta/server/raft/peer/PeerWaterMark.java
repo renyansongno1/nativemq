@@ -7,7 +7,7 @@ import jakarta.inject.Inject;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.ToString;
-import org.cloud.mq.meta.server.raft.election.ElectComponent;
+import org.cloud.mq.meta.server.raft.election.RaftConstant;
 import org.cloud.mq.meta.server.raft.log.LogProxy;
 
 import java.time.Duration;
@@ -24,8 +24,8 @@ public class PeerWaterMark {
 
     private static final Cache<String, PeerItem> WATER_MARK_CACHE = Caffeine.newBuilder()
             .maximumSize(10_000_000)
-            .expireAfterWrite(Duration.ofMillis(ElectComponent.HEARTBEAT_INTERVAL_MS * 3))
-            .expireAfterAccess(Duration.ofMillis(ElectComponent.HEARTBEAT_INTERVAL_MS * 3))
+            .expireAfterWrite(Duration.ofMillis(RaftConstant.HEARTBEAT_INTERVAL_S * 3000))
+            .expireAfterAccess(Duration.ofMillis(RaftConstant.HEARTBEAT_INTERVAL_S * 3000))
             .evictionListener(((s, peerItem, removalCause) -> {
 
             }))

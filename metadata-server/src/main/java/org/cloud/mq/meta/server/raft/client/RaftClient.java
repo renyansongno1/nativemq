@@ -3,16 +3,20 @@ package org.cloud.mq.meta.server.raft.client;
 import com.google.gson.Gson;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
+import io.grpc.stub.StreamObserver;
 import io.quarkus.scheduler.Scheduled;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import lombok.extern.slf4j.Slf4j;
+import org.cloud.mq.meta.raft.*;
+import org.cloud.mq.meta.server.interceptor.GrpcClientInterceptor;
 import org.cloud.mq.meta.server.raft.common.RaftUtils;
 import org.cloud.mq.meta.server.raft.peer.PeerFinder;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 /**
@@ -51,6 +55,7 @@ public class RaftClient {
             // init channel
             ManagedChannel channel = ManagedChannelBuilder.forAddress(peer, serverPort)
                     .usePlaintext()
+                    .intercept(new GrpcClientInterceptor())
                     .build();
             int id = RaftUtils.getIdByHost(null);
             idChannelMapping.put(id, channel);
@@ -60,7 +65,24 @@ public class RaftClient {
         }
         if (log.isDebugEnabled()) {
             log.debug("all channel is :{}", GSON.toJson(channels.stream().map(ManagedChannel::toString).collect(Collectors.toList())));
+            log.debug("id mapping is :{}", GSON.toJson(idChannelMapping));
         }
+    }
+
+    /**
+     * send vote req
+     * @param managedChannel channel
+     * @param raftVoteReq vote req body
+     * @return res
+     */
+    public RaftVoteRes sendVote(ManagedChannel managedChannel, RaftVoteReq raftVoteReq) {
+        RaftServerServiceGrpc.RaftServerServiceBlockingStub raftServerServiceBlockingStub = RaftServerServiceGrpc.newBlockingStub(managedChannel);
+        return raftServerServiceBlockingStub.requestVote(raftVoteReq);
+    }
+
+    public StreamObserver<AppendLogReq> appendLog(ManagedChannel managedChannel, StreamObserver<AppendLogRes> streamObserver) {
+        RaftServerServiceGrpc.RaftServerServiceStub raftServerServiceStub = RaftServerServiceGrpc.newStub(managedChannel).withDeadlineAfter(2, TimeUnit.SECONDS);
+        return raftServerServiceStub.appendEntries(streamObserver);
     }
 
     /**

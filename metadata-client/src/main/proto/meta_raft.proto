@@ -68,6 +68,7 @@ message AppendLogRes {
   uint64 nextIndex = 2;
   AppendResult result = 3;
   uint32 leaderId = 4;
+  uint32 myId = 5;
 }
 
 // read log index request

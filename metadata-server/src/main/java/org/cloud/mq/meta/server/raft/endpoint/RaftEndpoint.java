@@ -1,7 +1,6 @@
 package org.cloud.mq.meta.server.raft.endpoint;
 
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
+import io.smallrye.mutiny.Uni;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.Path;
@@ -16,19 +15,15 @@ import org.cloud.mq.meta.server.raft.election.ElectComponent;
 @Slf4j
 public class RaftEndpoint {
 
-    private static final Gson GSON = new GsonBuilder()
-            .registerTypeAdapter(ElectComponent.class, new ElectComponent())
-            .create();
-
     @Inject
     ElectComponent electComponent;
 
     @GET
-    public String getElectStatus() {
+    public Uni<ElectComponent> getElectStatus() {
         if (log.isDebugEnabled()) {
             log.debug("req raft status, component is :{}", electComponent);
         }
-        return GSON.toJson(electComponent);
+        return Uni.createFrom().item(electComponent);
     }
 
 }

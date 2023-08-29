@@ -1,14 +1,7 @@
 package org.cloud.mq.meta.server.raft.election;
 
-import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonSerializationContext;
-import com.google.gson.JsonSerializer;
 import com.google.protobuf.ByteString;
-import io.grpc.ManagedChannel;
-import io.grpc.stub.StreamObserver;
 import io.quarkus.runtime.Startup;
-import io.quarkus.scheduler.Scheduler;
 import io.smallrye.mutiny.Multi;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
@@ -18,15 +11,14 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.cloud.mq.meta.raft.*;
 import org.cloud.mq.meta.server.raft.common.RaftUtils;
+import org.cloud.mq.meta.server.raft.election.follower.RaftFollowerComponent;
 import org.cloud.mq.meta.server.raft.log.LogProxy;
 import org.cloud.mq.meta.server.raft.client.RaftClient;
 import org.cloud.mq.meta.server.raft.peer.PeerWaterMark;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 
-import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Random;
-import java.util.concurrent.TimeUnit;
 
 /**
  * Raft Elect
@@ -36,133 +28,60 @@ import java.util.concurrent.TimeUnit;
 @Startup
 @Slf4j
 @Getter
-public class ElectComponent implements JsonSerializer<ElectComponent> {
-
-    /**
-     * vote min interval
-     */
-    private static final int MIN_VOTE_TIME_INTERVAL_MS = 300;
-
-    /**
-     * vote max interval
-     */
-    private static final int MAX_VOTE_TIME_INTERVAL_MS = 1500;
-
-    /**
-     * leader Heartbeat interval
-     */
-    public static final int HEARTBEAT_INTERVAL_MS = 5000;
-
-    /**
-     * heartbeat scheduler every HEARTBEAT_INTERVAL_MS
-     */
-    private static final String HEARTBEAT_SCHEDULER = "heartbeat_scheduler";
-
-    /**
-     * follower listen leader heartbeat
-     */
-    private static final String HEARTBEAT_LISTEN_SCHEDULER = "heartbeat_listen_scheduler";
+public class ElectComponent {
 
     @Inject
-    transient RaftClient raftClient;
+    RaftClient raftClient;
 
     @Inject
-    transient LogProxy logProxy;
+    LogProxy logProxy;
 
     @Inject
-    transient Scheduler scheduler;
+    PeerWaterMark peerWaterMark;
 
     @Inject
-    transient PeerWaterMark peerWaterMark;
+    ElectState electState;
 
-    /**
-     * now term
-     */
-    private int term;
+    @Inject
+    RaftFollowerComponent followerComponent;
 
-    private int leaderId = -1;
-
-    private int myId;
-
-    private long lastLeaderHeartbeatTime;
-
-    /**
-     * role
-     */
-    private RaftStateEnum state = RaftStateEnum.CANDIDATE;
+    @ConfigProperty(name = "quarkus.scheduler.enabled", defaultValue = "true")
+    boolean scheduleStart;
 
     @PostConstruct
     public void init() {
-        // init read log
-        long localLogIndex = getLocalLogIndex();
-
-        new Thread(() -> {
-            // init vote
-            vote(localLogIndex);
-        },"elect-thread").start();
-    }
-
-    private void vote(long localLogIndex) {
-        while (state == RaftStateEnum.CANDIDATE) {
-            try {
-                Thread.sleep(new Random().nextInt(MIN_VOTE_TIME_INTERVAL_MS, MAX_VOTE_TIME_INTERVAL_MS));
-            } catch (InterruptedException e) {
-                // ignore
-            }
-            if (raftClient.getAllChannel().isEmpty()) {
-                continue;
-            }
-            myId = RaftUtils.getIdByHost(null);
-            // build vote req
-            RaftVoteReq raftVoteReq = RaftVoteReq.newBuilder()
-                    // always vote for myself
-                    .setLeaderId(myId)
-                    .setLogIndex(localLogIndex)
-                    .setTerm(0)
-                    .build();
-            int vote = 1;
-            for (ManagedChannel managedChannel : raftClient.getAllChannel()) {
-                try {
-                    RaftServerServiceGrpc.RaftServerServiceBlockingStub raftServerServiceBlockingStub = RaftServerServiceGrpc.newBlockingStub(managedChannel);
-                    RaftVoteRes raftVoteRes = raftServerServiceBlockingStub.requestVote(raftVoteReq);
-                    if (raftVoteRes.getResult() == RaftVoteRes.Result.ACCEPT) {
-                        vote++;
-                    } else if (raftVoteRes.getResult() == RaftVoteRes.Result.TERM_EXPIRE) {
-                        if (raftVoteReq.getTerm() > term) {
-                            // vote over by higher term
-                            becomeFollower(raftVoteRes.getLeaderId(), raftVoteReq.getTerm());
-                            return;
-                        }
-                    }
-                } catch (Exception e) {
-                    log.error("vote for channel:{}, error", managedChannel, e);
-                }
-            }
-            if (vote > (raftClient.getAllChannel().size() + 1)/2) {
-                becomeLeader();
-                break;
-            }
+        if (scheduleStart) {
+            new Thread(() -> {
+                // init vote
+                electState.becomeCandidate();
+            },"elect-thread").start();
         }
     }
 
+    /**
+     * receive other peer vote
+     * @param request vote req
+     * @return res
+     */
     public RaftVoteRes receiveVote(RaftVoteReq request) {
-        if (request.getTerm() > term || leaderId == -1) {
+        if (request.getTerm() > electState.getTerm().get()
+                || electState.getLeaderId() == -1) {
             // accept vote
-            becomeFollower(leaderId, request.getTerm());
+            electState.becomeFollower(request.getLeaderId(), request.getTerm());
             return RaftVoteRes.newBuilder()
                     .setResult(RaftVoteRes.Result.ACCEPT)
                     .build();
-        } else if (request.getTerm() < term) {
+        } else if (request.getTerm() < electState.getTerm().get()) {
             return RaftVoteRes.newBuilder()
                     .setResult(RaftVoteRes.Result.TERM_EXPIRE)
-                    .setLeaderId(leaderId)
-                    .setTerm(term)
+                    .setLeaderId(electState.getLeaderId())
+                    .setTerm(electState.getTerm().get())
                     .build();
         }
         return RaftVoteRes.newBuilder()
                 .setResult(RaftVoteRes.Result.REJECT)
-                .setLeaderId(leaderId)
-                .setTerm(term)
+                .setLeaderId(electState.getLeaderId())
+                .setTerm(electState.getTerm().get())
                 .build();
     }
 
@@ -171,34 +90,36 @@ public class ElectComponent implements JsonSerializer<ElectComponent> {
         request.onItem().invoke(item -> {
             if (item.getLogData().isEmpty()) {
                 // heartbeat
-                if (item.getTerm() > term) {
-                    becomeFollower(item.getLeaderId(), item.getTerm());
+                if (item.getTerm() > electState.getTerm().get()) {
+                    electState.becomeFollower(item.getLeaderId(), item.getTerm());
                     return;
                 }
-                if (item.getTerm() < term) {
+                if (item.getTerm() < electState.getTerm().get()) {
                     resList.add(AppendLogRes.newBuilder()
                             .setResult(AppendLogRes.AppendResult.NOT_LEADER)
-                            .setLeaderId(leaderId)
+                            .setLeaderId(electState.getLeaderId())
+                            .setMyId(RaftUtils.getIdByHost(null))
                             .build());
                     return;
                 }
                 // normal term
-                if (state == RaftStateEnum.COORDINATOR) {
-                    becomeFollower(item.getLeaderId(), item.getTerm());
+                if (electState.getState() == RaftStateEnum.COORDINATOR) {
+                    electState.becomeFollower(item.getLeaderId(), item.getTerm());
                     return;
                 }
-                if (state == RaftStateEnum.FOLLOWER) {
-                    lastLeaderHeartbeatTime = System.currentTimeMillis();
+                if (electState.getState() == RaftStateEnum.FOLLOWER) {
+                    followerComponent.receiveHeartbeat();
                     return;
                 }
             }
-            // log append not need
+            // todo log append
+
         });
         return Multi.createFrom().items(resList.stream());
     }
 
     public ReadIndexRes readIndex(ReadIndexReq readIndexReq) {
-        if (state != RaftStateEnum.LEADER) {
+        if (electState.getState() != RaftStateEnum.LEADER) {
             if (log.isDebugEnabled()) {
                 log.debug("read index not leader for:{}", readIndexReq);
             }
@@ -224,183 +145,9 @@ public class ElectComponent implements JsonSerializer<ElectComponent> {
         return res;
     }
 
-
-
-    private void becomeLeader() {
-        if (log.isDebugEnabled()) {
-            log.debug("id:{}, become leader", myId);
-        }
-        state = RaftStateEnum.LEADER;
-        // first term + 1
-        term++;
-        // second notify every node
-        // wait all node replay
-        heartbeat();
-        if (state != RaftStateEnum.LEADER) {
-            return;
-        }
-        // heartbeat schedule
-        scheduler.newJob(HEARTBEAT_SCHEDULER)
-                .setInterval(HEARTBEAT_INTERVAL_MS + "ms")
-                .setTask(executionContext -> {
-                    // do HEARTBEAT every HEARTBEAT_SCHEDULER seconds
-                    heartbeat();
-                })
-                .schedule();
-        // sync log
-        peerWaterMark.syncHighWaterMark(getLocalLogIndex());
-    }
-
-    private void heartbeat() {
-        if (state != RaftStateEnum.LEADER) {
-            scheduler.unscheduleJob(HEARTBEAT_SCHEDULER);
-            return;
-        }
-        final int[] successCount = {1};
-        for (ManagedChannel managedChannel : raftClient.getAllChannel()) {
-            try {
-                RaftServerServiceGrpc.RaftServerServiceStub raftServerServiceStub = RaftServerServiceGrpc.newStub(managedChannel).withDeadlineAfter(2, TimeUnit.SECONDS);
-                StreamObserver<AppendLogReq> appendLogReqStreamObserver = raftServerServiceStub.appendEntries(new StreamObserver<AppendLogRes>() {
-                    @Override
-                    public void onNext(AppendLogRes appendLogRes) {
-                        if (appendLogRes.getResult() == AppendLogRes.AppendResult.NOT_LEADER) {
-                            // other leader is higher term
-                            becomeFollower(appendLogRes.getLeaderId(), appendLogRes.getTerm());
-                            return;
-                        }
-                        if (appendLogRes.getResult() == AppendLogRes.AppendResult.INCONSISTENCY) {
-                            // TODO: 2023/7/31 log error
-                        }
-                        if (appendLogRes.getResult() == AppendLogRes.AppendResult.SUCCESS) {
-                            if (log.isDebugEnabled()) {
-                                log.debug("receive:{}, success heartbeat response", managedChannel);
-                            }
-                            successCount[0]++;
-                            peerWaterMark.refreshPeerItem(raftClient.getPeerAddrByChannel(managedChannel), appendLogRes.getNextIndex());
-                        }
-                    }
-
-                    @Override
-                    public void onError(Throwable throwable) {
-                        log.error("send heaert beat error for {}", managedChannel, throwable);
-                    }
-
-                    @Override
-                    public void onCompleted() {
-                        if (log.isDebugEnabled()) {
-                            log.debug("send heartbeat for:{}, completed", managedChannel);
-                        }
-                    }
-                });
-                // send msg
-                appendLogReqStreamObserver.onNext(AppendLogReq.newBuilder()
-                        .setLeaderId(myId)
-                        .setLogIndex(getLocalLogIndex())
-                        .setTerm(term)
-                        // null log data on behalf of Heartbeat
-                        .setLogData(ByteString.copyFrom(new byte[]{}))
-                        .build());
-
-                appendLogReqStreamObserver.onCompleted();
-            } catch (Exception e) {
-                log.error("send heartbeat error for channel:{}", managedChannel, e);
-            }
-        }
-        // check heartbeat
-        if (successCount[0] < (raftClient.getAllChannel().size() + 1) / 2) {
-            becomeCandidate();
-        }
-    }
-
-    private void becomeCandidate() {
-        if (log.isDebugEnabled()) {
-            log.debug("id:{}, become candidate", myId);
-        }
-        state = RaftStateEnum.CANDIDATE;
-        scheduler.unscheduleJob(HEARTBEAT_SCHEDULER);
-        scheduler.unscheduleJob(HEARTBEAT_LISTEN_SCHEDULER);
-        vote(getLocalLogIndex());
-    }
-
-    private void becomeFollower(int leaderId, int term) {
-        if (log.isDebugEnabled()) {
-            log.debug("id:{}, become follower", myId);
-        }
-        state = RaftStateEnum.FOLLOWER;
-        this.leaderId = leaderId;
-        this.term = term;
-        // stop old term log heaertbeat scheduler
-        scheduler.unscheduleJob(HEARTBEAT_SCHEDULER);
-        // start leader heartbeat listener
-        scheduler.newJob(HEARTBEAT_LISTEN_SCHEDULER)
-                .setInterval(HEARTBEAT_INTERVAL_MS + "ms")
-                .setTask(executionContext -> {
-                    if (state == RaftStateEnum.FOLLOWER) {
-                        if (lastLeaderHeartbeatTime + HEARTBEAT_INTERVAL_MS * 3 < System.currentTimeMillis()) {
-                            becomeCandidate();
-                        }
-                    }
-                })
-                .schedule();
-        new Thread(this::followerSyncLogTask, "follower-log-sync").start();
-    }
-
-    private void followerSyncLogTask() {
-        while (state == RaftStateEnum.FOLLOWER) {
-            long localLogIndex = getLocalLogIndex();
-            try {
-                ManagedChannel channelById = raftClient.getChannelById(leaderId);
-                ReadIndexReq readIndexReq = ReadIndexReq.newBuilder()
-                        .setTerm(term)
-                        .setStartIndex(localLogIndex)
-                        .setFromHost(System.getenv("HOSTNAME"))
-                        .build();
-                RaftServerServiceGrpc.RaftServerServiceBlockingStub raftServerServiceBlockingStub = RaftServerServiceGrpc.newBlockingStub(channelById);
-                ReadIndexRes readIndexRes = raftServerServiceBlockingStub.readIndex(readIndexReq);
-                if (!readIndexRes.getSuccess()) {
-                    if (readIndexRes.getNextIndex() != -1) {
-                        while (localLogIndex > readIndexRes.getNextIndex()) {
-                            logProxy.deleteByIndex(localLogIndex);
-                            localLogIndex--;
-                        }
-                    }
-                }
-                if (readIndexRes.getSuccess()) {
-                    // append log log
-                    logProxy.appendLog(readIndexRes.getNextIndex(), readIndexRes.getLogDates(0).toByteArray());
-                }
-            } catch (Exception e) {
-                log.error("follower sync log thread error catch", e);
-            }
-        }
-    }
-
-    /**
-     * read local log for index
-     * @return log index
-     */
-    private long getLocalLogIndex() {
-        return logProxy.getLastKey();
-    }
-
     /**
      * pre destroy clean method
      */
     @PreDestroy
-    public void destroy() {
-        scheduler.unscheduleJob(HEARTBEAT_SCHEDULER);
-    }
-
-    @Override
-    public JsonElement serialize(ElectComponent src, Type typeOfSrc, JsonSerializationContext context) {
-        if (log.isDebugEnabled()) {
-            log.debug("elect json serialize");
-        }
-        JsonObject jsonObject = new JsonObject();
-        jsonObject.addProperty("term", src.getTerm());
-        jsonObject.addProperty("leaderId", src.getLeaderId());
-        jsonObject.addProperty("myId", src.getMyId());
-        jsonObject.addProperty("lastLeaderHeartbeatTime", src.getLastLeaderHeartbeatTime());
-        return jsonObject;
-    }
+    public void destroy() {}
 }
