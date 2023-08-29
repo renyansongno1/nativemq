@@ -80,6 +80,12 @@ public class RaftClient {
         return raftServerServiceBlockingStub.requestVote(raftVoteReq);
     }
 
+    /**
+     * append log or send heartbeat
+     * @param managedChannel channel
+     * @param streamObserver stream observer
+     * @return res observer
+     */
     public StreamObserver<AppendLogReq> appendLog(ManagedChannel managedChannel, StreamObserver<AppendLogRes> streamObserver) {
         RaftServerServiceGrpc.RaftServerServiceStub raftServerServiceStub = RaftServerServiceGrpc.newStub(managedChannel).withDeadlineAfter(2, TimeUnit.SECONDS);
         return raftServerServiceStub.appendEntries(streamObserver);

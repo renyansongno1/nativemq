@@ -15,7 +15,6 @@ import org.cloud.mq.meta.server.raft.election.follower.RaftFollowerComponent;
 import org.cloud.mq.meta.server.raft.log.LogProxy;
 import org.cloud.mq.meta.server.raft.client.RaftClient;
 import org.cloud.mq.meta.server.raft.peer.PeerWaterMark;
-import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -45,17 +44,9 @@ public class ElectComponent {
     @Inject
     RaftFollowerComponent followerComponent;
 
-    @ConfigProperty(name = "quarkus.scheduler.enabled", defaultValue = "true")
-    boolean scheduleStart;
-
     @PostConstruct
     public void init() {
-        if (scheduleStart) {
-            new Thread(() -> {
-                // init vote
-                electState.becomeCandidate();
-            },"elect-thread").start();
-        }
+        electState.becomeCandidate();
     }
 
     /**

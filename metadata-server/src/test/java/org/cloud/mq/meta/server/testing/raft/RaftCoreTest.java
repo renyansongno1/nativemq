@@ -3,13 +3,17 @@ package org.cloud.mq.meta.server.testing.raft;
 import com.google.common.collect.Lists;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
+import io.grpc.stub.StreamObserver;
 import io.quarkus.test.InjectMock;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import lombok.extern.slf4j.Slf4j;
+import org.cloud.mq.meta.raft.AppendLogReq;
+import org.cloud.mq.meta.raft.AppendLogRes;
 import org.cloud.mq.meta.raft.RaftVoteRes;
 import org.cloud.mq.meta.server.raft.client.RaftClient;
 import org.cloud.mq.meta.server.raft.election.ElectState;
+import org.cloud.mq.meta.server.raft.election.heartbeat.HeartbeatStreamObserver;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentMatchers;
@@ -23,6 +27,7 @@ import static org.awaitility.Awaitility.await;
 
 /**
  * raft test
+ *
  * @author renyansong
  */
 @QuarkusTest
@@ -40,16 +45,25 @@ public class RaftCoreTest {
     @Inject
     ElectState electState;
 
+    @Inject
+    HeartbeatStreamObserver heartbeatStreamObserver;
+
     @BeforeEach
     void beforeRaftTest() {
+        ManagedChannel peer2 = ManagedChannelBuilder.forAddress(PEER2, 8080)
+                .usePlaintext()
+                .build();
+        ManagedChannel peer3 = ManagedChannelBuilder.forAddress(PEER3, 8080)
+                .usePlaintext()
+                .build();
         // channel mock
-        List<ManagedChannel> managedChannels =  Lists.newArrayList(ManagedChannelBuilder.forAddress(PEER2, 8080)
-                        .usePlaintext()
-                        .build(),
-                ManagedChannelBuilder.forAddress(PEER3, 8080)
-                        .usePlaintext()
-                        .build());
+        List<ManagedChannel> managedChannels = Lists.newArrayList(peer2, peer3);
         Mockito.when(raftClient.getAllChannel()).thenReturn(managedChannels);
+        Mockito.when(raftClient.getPeerAddrByChannel(peer2)).thenReturn(PEER2);
+        Mockito.when(raftClient.getPeerAddrByChannel(peer3)).thenReturn(PEER3);
+
+        Mockito.when(raftClient.getChannelById(1)).thenReturn(peer2);
+        Mockito.when(raftClient.getChannelById(2)).thenReturn(peer3);
     }
 
     /**
@@ -73,9 +87,38 @@ public class RaftCoreTest {
                 });
         // send vote
         electState.becomeCandidate();
-        await().atMost(Duration.ofSeconds(10)).untilAsserted( () ->
+        await().atMost(Duration.ofSeconds(10)).untilAsserted(() ->
                 assertThat(electState.getLeaderId()).isEqualTo(0)
         );
+    }
+
+    @Test
+    void heartbeatSuccessTest() {
+        // null impl msg sender
+        StreamObserver<AppendLogReq> appendLogReqStreamObserver = new StreamObserver<AppendLogReq>() {
+            @Override
+            public void onNext(AppendLogReq appendLogReq) {
+            }
+
+            @Override
+            public void onError(Throwable throwable) {
+            }
+
+            @Override
+            public void onCompleted() {
+            }
+        };
+        Mockito.when(raftClient.appendLog(
+                ArgumentMatchers.any(),
+                ArgumentMatchers.any())).thenReturn(appendLogReqStreamObserver);
+        // vote first
+        voteSuccessTest();
+        // heartbeat test
+        heartbeatStreamObserver.onNext(AppendLogRes.newBuilder()
+                .setResult(AppendLogRes.AppendResult.SUCCESS)
+                .setMyId(1)
+                .build());
+        assertThat(electState.getLeaderId()).isEqualTo(0);
     }
 
 }
