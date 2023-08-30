@@ -37,8 +37,6 @@ public class RaftFollowerComponent {
     @Inject
     RaftClient raftClient;
 
-    private long lastLeaderHeartbeatTime;
-
     @ConsumeEvent(RaftConstant.RAFT_STATE_TOPIC)
     public void consumeStateEvent(Message<RaftStateEnum> message) {
         if (message.body() != RaftStateEnum.FOLLOWER) {
@@ -52,19 +50,14 @@ public class RaftFollowerComponent {
 
     private void becomeFollower(int leaderId, int term) {
         if (log.isDebugEnabled()) {
-            log.debug("id:{}, become follower", RaftUtils.getIdByHost(null));
+            log.debug("id:{}, become follower, now LeaderId:{}, term:{}", RaftUtils.getIdByHost(null), electState.getLeaderId(), electState.getTerm().get());
         }
-        electState.becomeFollower(leaderId, term);
         // start leader heartbeat listener
         try {
             scheduler.newJob(RaftConstant.HEARTBEAT_LISTEN_SCHEDULER)
                     .setInterval(RaftConstant.HEARTBEAT_INTERVAL_S + "s")
                     .setTask(executionContext -> {
-                        if (electState.getState() == RaftStateEnum.FOLLOWER) {
-                            if (lastLeaderHeartbeatTime + RaftConstant.HEARTBEAT_INTERVAL_S * 3000 < System.currentTimeMillis()) {
-                                electState.becomeCandidate();
-                            }
-                        }
+                        leaderHeartbeatCheck();
                     })
                     .schedule();
         } catch (IllegalStateException e) {
@@ -75,6 +68,17 @@ public class RaftFollowerComponent {
         }
         // TODO: 2023/8/29 receive Heartbeat
         new Thread(this::followerSyncLogTask, "follower-log-sync").start();
+    }
+
+    /**
+     * leader Heartbeat check
+     */
+    public void leaderHeartbeatCheck() {
+        if (electState.getState() == RaftStateEnum.FOLLOWER) {
+            if (electState.getLastLeaderHeartbeatTime() + RaftConstant.HEARTBEAT_INTERVAL_S * 3000 < System.currentTimeMillis()) {
+                electState.becomeCandidate();
+            }
+        }
     }
 
     @SuppressWarnings("BusyWait")
@@ -122,7 +126,4 @@ public class RaftFollowerComponent {
         }
     }
 
-    public void receiveHeartbeat() {
-        this.lastLeaderHeartbeatTime = System.currentTimeMillis();
-    }
 }

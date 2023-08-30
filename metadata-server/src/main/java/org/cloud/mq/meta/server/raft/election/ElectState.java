@@ -29,6 +29,10 @@ public class ElectState {
     @Setter
     private int leaderId = -1;
 
+    @Getter
+    @Setter
+    private long lastLeaderHeartbeatTime;
+
     /**
      * becomeCandidate
      */
@@ -75,5 +79,16 @@ public class ElectState {
      */
     public RaftStateEnum getState() {
         return STATE.get();
+    }
+
+    /**
+     * reset all state
+     * just for test
+     */
+    public void reset() {
+        STATE.set(null);
+        lastLeaderHeartbeatTime = 0;
+        leaderId = -1;
+        term.set(0);
     }
 }

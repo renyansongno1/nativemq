@@ -11,7 +11,6 @@ public class RaftUtils {
     public static int getIdByHost(String host) {
         if (StringUtil.isNullOrEmpty(host)) {
             String hostname = System.getenv("HOSTNAME");
-            log.info("get hostname env:{}", hostname);
             if (StringUtil.isNullOrEmpty(hostname)) {
                 return 0;
             }

@@ -11,7 +11,6 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.cloud.mq.meta.raft.*;
 import org.cloud.mq.meta.server.raft.common.RaftUtils;
-import org.cloud.mq.meta.server.raft.election.follower.RaftFollowerComponent;
 import org.cloud.mq.meta.server.raft.log.LogProxy;
 import org.cloud.mq.meta.server.raft.client.RaftClient;
 import org.cloud.mq.meta.server.raft.peer.PeerWaterMark;
@@ -40,9 +39,6 @@ public class ElectComponent {
 
     @Inject
     ElectState electState;
-
-    @Inject
-    RaftFollowerComponent followerComponent;
 
     @PostConstruct
     public void init() {
@@ -99,7 +95,7 @@ public class ElectComponent {
                     return;
                 }
                 if (electState.getState() == RaftStateEnum.FOLLOWER) {
-                    followerComponent.receiveHeartbeat();
+                    electState.setLastLeaderHeartbeatTime(System.currentTimeMillis());
                     return;
                 }
             }

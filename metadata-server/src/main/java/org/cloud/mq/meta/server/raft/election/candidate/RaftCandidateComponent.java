@@ -73,9 +73,9 @@ public class RaftCandidateComponent {
                     if (raftVoteRes.getResult() == RaftVoteRes.Result.ACCEPT) {
                         vote++;
                     } else if (raftVoteRes.getResult() == RaftVoteRes.Result.TERM_EXPIRE) {
-                        if (raftVoteReq.getTerm() > term.get()) {
+                        if (raftVoteRes.getTerm() > term.get()) {
                             // vote over by higher term
-                            electState.becomeFollower(raftVoteRes.getLeaderId(), raftVoteReq.getTerm());
+                            electState.becomeFollower(raftVoteRes.getLeaderId(), raftVoteRes.getTerm());
                             return;
                         }
                     }
