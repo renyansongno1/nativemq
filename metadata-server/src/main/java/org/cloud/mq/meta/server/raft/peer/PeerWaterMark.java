@@ -11,6 +11,11 @@ import org.cloud.mq.meta.server.raft.election.RaftConstant;
 import org.cloud.mq.meta.server.raft.log.LogProxy;
 
 import java.time.Duration;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * log sync water mark
@@ -21,6 +26,10 @@ public class PeerWaterMark {
 
     @Inject
     LogProxy logProxy;
+
+    private static final Lock WAIT_LOCK = new ReentrantLock();
+
+    private static final Condition WAIT_WATERMARK_CONDITION = WAIT_LOCK.newCondition();
 
     private static final Cache<String, PeerItem> WATER_MARK_CACHE = Caffeine.newBuilder()
             .maximumSize(10_000_000)
@@ -40,16 +49,51 @@ public class PeerWaterMark {
     /**
      * when receive heartbeat, update peer item data
      * @param peer peer ip:port
-     * @param logIndex now log index
      */
-    public void refreshPeerItem(String peer, long logIndex) {
+    public void refreshPeerItem(String peer) {
         PeerItem item = WATER_MARK_CACHE.get(peer, k -> null);
         if (item == null) {
-            WATER_MARK_CACHE.put(peer, new PeerItem(peer, logIndex));
-            return;
+            WATER_MARK_CACHE.put(peer, new PeerItem(peer, 0));
         }
-        item.setPeer(peer);
-        item.setLowWaterMark(logIndex);
+    }
+
+    /**
+     * wait for Quorum by provide watermark
+     * will block thread
+     * @param waterMark wait for
+     * @return success
+     */
+    public boolean waitQuorum(long waterMark) {
+        WAIT_LOCK.lock();
+        try {
+            while (true) {
+                // check
+                ConcurrentMap<String, PeerItem> peerMap = WATER_MARK_CACHE.asMap();
+                int receivedCount = 0;
+                for (String peer : peerMap.keySet()) {
+                    PeerItem peerItem = WATER_MARK_CACHE.get(peer, k -> null);
+                    if (peerItem != null && peerItem.getLowWaterMark() >= waterMark) {
+                        receivedCount++;
+                    }
+                }
+                if (receivedCount < peerMap.size() / 2) {
+                    try {
+                        boolean await = WAIT_WATERMARK_CONDITION.await(3000L, TimeUnit.SECONDS);
+                        if (!await) {
+                            // timeout
+                            return false;
+                        }
+                    } catch (InterruptedException e) {
+                        // ignore
+                        return false;
+                    }
+                } else {
+                    return true;
+                }
+            }
+        } finally {
+            WAIT_LOCK.unlock();
+        }
     }
 
     public long getWaterMark(String peer) {
@@ -66,6 +110,12 @@ public class PeerWaterMark {
             return;
         }
         peerItem.setLowWaterMark(lowWaterMark);
+        WAIT_LOCK.lock();
+        try {
+            WAIT_WATERMARK_CONDITION.signalAll();
+        } finally {
+            WAIT_LOCK.unlock();
+        }
     }
 
     @Getter

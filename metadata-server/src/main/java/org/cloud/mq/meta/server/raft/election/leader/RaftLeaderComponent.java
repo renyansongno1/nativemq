@@ -53,6 +53,9 @@ public class RaftLeaderComponent {
         if (electState.getState() != RaftStateEnum.LEADER) {
             return;
         }
+        // reload log
+        // TODO: 2023/9/24 snapshot log
+
         // heartbeat schedule
         scheduler.newJob(RaftConstant.HEARTBEAT_SCHEDULER)
                 .setInterval(RaftConstant.HEARTBEAT_INTERVAL_S + "s")

@@ -1,18 +1,25 @@
 package org.cloud.mq.meta.server.testing.raft;
 
 import com.google.common.collect.Lists;
+import com.google.gson.Gson;
 import com.google.protobuf.ByteString;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.stub.StreamObserver;
+import io.quarkus.grpc.GrpcClient;
 import io.quarkus.test.InjectMock;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import lombok.extern.slf4j.Slf4j;
+import org.cloud.mq.meta.api.BrokerRegisterReply;
+import org.cloud.mq.meta.api.BrokerRegisterRequest;
+import org.cloud.mq.meta.api.MetaBrokerService;
 import org.cloud.mq.meta.raft.AppendLogReq;
 import org.cloud.mq.meta.raft.AppendLogRes;
 import org.cloud.mq.meta.raft.RaftVoteRes;
 import org.cloud.mq.meta.raft.ReadIndexRes;
+import org.cloud.mq.meta.server.common.MetadataDefinition;
+import org.cloud.mq.meta.server.common.MetadataTypeEnum;
 import org.cloud.mq.meta.server.raft.client.RaftClient;
 import org.cloud.mq.meta.server.raft.common.RaftUtils;
 import org.cloud.mq.meta.server.raft.election.RaftComponent;
@@ -21,6 +28,8 @@ import org.cloud.mq.meta.server.raft.election.RaftStateEnum;
 import org.cloud.mq.meta.server.raft.election.follower.RaftFollowerComponent;
 import org.cloud.mq.meta.server.raft.election.heartbeat.HeartbeatComponent;
 import org.cloud.mq.meta.server.raft.election.heartbeat.HeartbeatStreamObserver;
+import org.cloud.mq.meta.server.raft.log.LogProxy;
+import org.cloud.mq.meta.server.raft.peer.PeerWaterMark;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -45,6 +54,8 @@ import static org.awaitility.Awaitility.await;
 @Slf4j
 public class RaftCoreTest {
 
+    private static final String PEER1 = "peer1";
+
     private static final String PEER2 = "peer2";
 
     private static final String PEER3 = "peer3";
@@ -68,6 +79,15 @@ public class RaftCoreTest {
     @Inject
     RaftComponent raftComponent;
 
+    @Inject
+    PeerWaterMark peerWaterMark;
+
+    @GrpcClient("metaBrokerService")
+    org.cloud.mq.meta.api.MetaBrokerServiceGrpc.MetaBrokerServiceBlockingStub metaBrokerServiceBlockingStub;
+
+    @Inject
+    LogProxy logProxy;
+
     @BeforeEach
     void beforeRaftTest() {
         ManagedChannel peer2 = ManagedChannelBuilder.forAddress(PEER2, 8080)
@@ -88,9 +108,13 @@ public class RaftCoreTest {
     }
 
     @AfterEach
-    void clearState() {
+    void clearState() throws Exception {
         electState.reset();
         MockitoAnnotations.openMocks(this);
+        peerWaterMark.updateLowWaterMark(PEER1, 0);
+        peerWaterMark.updateLowWaterMark(PEER2, 0);
+        peerWaterMark.updateLowWaterMark(PEER3, 0);
+        logProxy.clearAll();
     }
 
     /**
@@ -171,7 +195,7 @@ public class RaftCoreTest {
                 });
         // send vote
         electState.becomeCandidate();
-        await().atMost(Duration.ofSeconds(2)).untilAsserted(() ->
+        await().atMost(Duration.ofSeconds(3)).untilAsserted(() ->
                 assertThat(electState.getLeaderId()).isEqualTo(0)
         );
     }
@@ -274,8 +298,43 @@ public class RaftCoreTest {
     }
 
     @Test
-    void readIndexTest() {
+    void waitWatermarkSyncTest() {
+        voteSuccessTest();
+        AtomicBoolean syncCompile = new AtomicBoolean(false);
+        Thread.ofVirtual().start(() -> {
+            peerWaterMark.waitQuorum(1);
+            syncCompile.set(true);
+        });
+        peerWaterMark.refreshPeerItem(PEER1);
+        peerWaterMark.refreshPeerItem(PEER3);
+        peerWaterMark.updateLowWaterMark(PEER1, 1);
+        peerWaterMark.updateLowWaterMark(PEER3, 2);
+        await().atMost(Duration.ofSeconds(2)).untilAsserted(() -> assertThat(syncCompile).isTrue());
+    }
 
+    @Test
+    void brokerRegistryTest() {
+        voteSuccessTest();
+        BrokerRegisterRequest request = BrokerRegisterRequest.newBuilder()
+                .setCluster("test")
+                .setId(1)
+                .setIp("127.0.0.1")
+                .build();
+        AtomicBoolean success = new AtomicBoolean(false);
+        Thread.ofVirtual().start(() -> {
+            BrokerRegisterReply registerReply = metaBrokerServiceBlockingStub.brokerRegister(request);
+            success.set(registerReply.getSuccess());
+        });
+        peerWaterMark.refreshPeerItem(PEER2);
+        peerWaterMark.refreshPeerItem(PEER3);
+        peerWaterMark.updateLowWaterMark(PEER2, 1);
+        peerWaterMark.updateLowWaterMark(PEER3, 2);
+        await().atMost(Duration.ofSeconds(200)).untilAsserted(() -> assertThat(success.get()).isTrue());
+        // get log
+        byte[] bytes = logProxy.readIndex(1);
+        String s = new String(bytes);
+        MetadataDefinition metadataDefinition = new Gson().fromJson(s, MetadataDefinition.class);
+        assertThat(metadataDefinition.getMetadataTypeEnum() == MetadataTypeEnum.BROKER).isTrue();
     }
 
 }

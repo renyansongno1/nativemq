@@ -72,7 +72,7 @@ public class RaftComponent {
                 .build();
     }
 
-    public AppendLogRes appendEntry(AppendLogReq item) {
+    public synchronized AppendLogRes appendEntry(AppendLogReq item) {
         if (item.getLogData().isEmpty()) {
             if (item.getTerm() > electState.getTerm().get()) {
                 electState.becomeFollower(item.getLeaderId(), item.getTerm());
@@ -106,7 +106,14 @@ public class RaftComponent {
             }
         }
         // leader write data
-        return null;
+        long nextKey = logProxy.getLastKey() + 1;
+        logProxy.appendLog(nextKey, item.getLogData().toByteArray());
+        return AppendLogRes.newBuilder()
+                .setResult(AppendLogRes.AppendResult.SUCCESS)
+                .setLeaderId(item.getLeaderId())
+                .setNextIndex(nextKey + 1)
+                .setMyId(RaftUtils.getIdByHost(null))
+                .build();
     }
 
     @SuppressWarnings("BusyWait")

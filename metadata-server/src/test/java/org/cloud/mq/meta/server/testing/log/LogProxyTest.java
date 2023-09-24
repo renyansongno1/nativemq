@@ -1,4 +1,4 @@
-package org.cloud.mq.meta.server.testing;
+package org.cloud.mq.meta.server.testing.log;
 
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;

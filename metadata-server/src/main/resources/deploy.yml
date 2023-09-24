@@ -108,10 +108,8 @@ spec:
           - "ReadWriteOnce"
         resources:
           requests:
-            storage: 300m
-        selector:
-          matchLabels:
-            pv-name: metadata-log-pv
+            storage: 300
+        volumeName: metadata-log-pv
 ---
 apiVersion: v1
 kind: PersistentVolume
@@ -124,6 +122,7 @@ spec:
   accessModes:
     - ReadWriteOnce
   persistentVolumeReclaimPolicy: Retain
+  storageClassName: local-path
   hostPath:
     path: /tmp/nativemq
 ---

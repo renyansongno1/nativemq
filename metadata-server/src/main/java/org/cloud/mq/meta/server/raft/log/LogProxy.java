@@ -99,7 +99,7 @@ public class LogProxy {
         Files.walkFileTree(directory, new SimpleFileVisitor<>() {
             @Override
             public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
-                Files.delete(file); // 删除文件
+                Files.delete(file);
                 return FileVisitResult.CONTINUE;
             }
         });
@@ -109,7 +109,7 @@ public class LogProxy {
      * find the last key
      * @return last key long value
      */
-    public long getLastKey() {
+    public synchronized long getLastKey() {
         RocksIterator iter = rocksDb.newIterator();
         iter.seekToLast();
         if (iter.isValid()) {

@@ -43,7 +43,7 @@ public class HeartbeatStreamObserver implements StreamObserver<AppendLogRes> {
             if (log.isDebugEnabled()) {
                 log.debug("receive:{}, success heartbeat response", appendLogRes.getMyId());
             }
-            peerWaterMark.refreshPeerItem(raftClient.getPeerAddrByChannel(raftClient.getChannelById(appendLogRes.getMyId())), appendLogRes.getNextIndex());
+            peerWaterMark.refreshPeerItem(raftClient.getPeerAddrByChannel(raftClient.getChannelById(appendLogRes.getMyId())));
         }
     }
 
