@@ -5,7 +5,7 @@ import jakarta.inject.Inject;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.Path;
 import lombok.extern.slf4j.Slf4j;
-import org.cloud.mq.meta.server.raft.election.ElectComponent;
+import org.cloud.mq.meta.server.raft.election.RaftComponent;
 
 /**
  * endpoint
@@ -16,18 +16,18 @@ import org.cloud.mq.meta.server.raft.election.ElectComponent;
 public class RaftEndpoint {
 
     @Inject
-    ElectComponent electComponent;
+    RaftComponent raftComponent;
 
     /**
      * status
      * @return res
      */
     @GET
-    public Uni<ElectComponent> getElectStatus() {
+    public Uni<RaftComponent> getElectStatus() {
         if (log.isDebugEnabled()) {
-            log.debug("req raft status, component is :{}", electComponent);
+            log.debug("req raft status, component is :{}", raftComponent);
         }
-        return Uni.createFrom().item(electComponent);
+        return Uni.createFrom().item(raftComponent);
     }
 
 }

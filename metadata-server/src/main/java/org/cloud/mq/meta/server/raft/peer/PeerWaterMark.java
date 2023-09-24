@@ -46,7 +46,10 @@ public class PeerWaterMark {
         PeerItem item = WATER_MARK_CACHE.get(peer, k -> null);
         if (item == null) {
             WATER_MARK_CACHE.put(peer, new PeerItem(peer, logIndex));
+            return;
         }
+        item.setPeer(peer);
+        item.setLowWaterMark(logIndex);
     }
 
     public long getWaterMark(String peer) {
@@ -78,7 +81,6 @@ public class PeerWaterMark {
             this.peer = peer;
             this.lowWaterMark = lowWaterMark;
         }
-
 
     }
 

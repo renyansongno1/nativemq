@@ -66,8 +66,6 @@ public class RaftFollowerComponent {
             }
             return;
         }
-        // TODO: 2023/8/29 receive Heartbeat
-        new Thread(this::followerSyncLogTask, "follower-log-sync").start();
     }
 
     /**
@@ -82,8 +80,17 @@ public class RaftFollowerComponent {
     }
 
     @SuppressWarnings("BusyWait")
-    private void followerSyncLogTask() {
-        while (electState.getState() == RaftStateEnum.FOLLOWER) {
+    @ConsumeEvent(value = RaftConstant.LOG_SYNC_TOPIC)
+    public void followerSyncLogTask(long logIndex) {
+        while (electState.getState() != RaftStateEnum.FOLLOWER) {
+            try {
+                Thread.sleep(10);
+            } catch (InterruptedException ex) {
+                // ignore...
+            }
+        }
+        long nextIndex = -1;
+        while (electState.getState() == RaftStateEnum.FOLLOWER && nextIndex < logIndex) {
             long localLogIndex = logProxy.getLastKey();
             try {
                 ManagedChannel channelById = raftClient.getChannelById(electState.getLeaderId());
@@ -99,10 +106,9 @@ public class RaftFollowerComponent {
                 ReadIndexReq readIndexReq = ReadIndexReq.newBuilder()
                         .setTerm(electState.getTerm().get())
                         .setStartIndex(localLogIndex)
-                        .setFromHost(System.getenv("HOSTNAME"))
+                        .setFromHost(RaftUtils.getMyHostName())
                         .build();
-                RaftServerServiceGrpc.RaftServerServiceBlockingStub raftServerServiceBlockingStub = RaftServerServiceGrpc.newBlockingStub(channelById);
-                ReadIndexRes readIndexRes = raftServerServiceBlockingStub.readIndex(readIndexReq);
+                ReadIndexRes readIndexRes = raftClient.readIndex(channelById, readIndexReq);
                 if (!readIndexRes.getSuccess()) {
                     if (readIndexRes.getNextIndex() != -1) {
                         while (localLogIndex > readIndexRes.getNextIndex()) {
@@ -112,8 +118,9 @@ public class RaftFollowerComponent {
                     }
                 }
                 if (readIndexRes.getSuccess()) {
+                    nextIndex = readIndexRes.getNextIndex();
                     // append log log
-                    logProxy.appendLog(readIndexRes.getNextIndex(), readIndexRes.getLogDates(0).toByteArray());
+                    logProxy.appendLog(logIndex, readIndexRes.getLogDates(0).toByteArray());
                 }
             } catch (Exception e) {
                 log.error("follower sync log thread error catch, sleep...", e);

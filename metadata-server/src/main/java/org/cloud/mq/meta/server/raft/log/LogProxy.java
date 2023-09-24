@@ -118,7 +118,6 @@ public class LogProxy {
             }
             return Longs.fromByteArray(iter.key());
         }
-        log.warn("key not valid, please check db file");
         return 0;
     }
 

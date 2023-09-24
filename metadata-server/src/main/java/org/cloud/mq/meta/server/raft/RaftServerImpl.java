@@ -5,7 +5,7 @@ import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
 import jakarta.inject.Inject;
 import org.cloud.mq.meta.raft.*;
-import org.cloud.mq.meta.server.raft.election.ElectComponent;
+import org.cloud.mq.meta.server.raft.election.RaftComponent;
 
 /**
  * grpc raft impl
@@ -15,21 +15,21 @@ import org.cloud.mq.meta.server.raft.election.ElectComponent;
 public class RaftServerImpl implements RaftServerService {
 
     @Inject
-    ElectComponent electComponent;
+    RaftComponent raftComponent;
 
     @Override
     public Uni<RaftVoteRes> requestVote(RaftVoteReq request) {
-        return Uni.createFrom().item(electComponent.receiveVote(request));
+        return Uni.createFrom().item(raftComponent.receiveVote(request));
     }
 
     @Override
     public Uni<ReadIndexRes> readIndex(ReadIndexReq request) {
-        return Uni.createFrom().item(electComponent.readIndex(request));
+        return Uni.createFrom().item(raftComponent.readIndex(request));
     }
 
     @Override
     public Multi<AppendLogRes> appendEntries(Multi<AppendLogReq> request) {
-        return electComponent.appendEntry(request);
+        return request.onItem().transform(item -> raftComponent.appendEntry(item));
     }
 
 }

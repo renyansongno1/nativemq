@@ -2,7 +2,7 @@ package org.cloud.mq.meta.server.raft.election;
 
 import com.google.protobuf.ByteString;
 import io.quarkus.runtime.Startup;
-import io.smallrye.mutiny.Multi;
+import io.vertx.core.eventbus.EventBus;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -15,9 +15,6 @@ import org.cloud.mq.meta.server.raft.log.LogProxy;
 import org.cloud.mq.meta.server.raft.client.RaftClient;
 import org.cloud.mq.meta.server.raft.peer.PeerWaterMark;
 
-import java.util.ArrayList;
-import java.util.List;
-
 /**
  * Raft Elect
  * @author renyansong
@@ -26,7 +23,7 @@ import java.util.List;
 @Startup
 @Slf4j
 @Getter
-public class ElectComponent {
+public class RaftComponent {
 
     @Inject
     RaftClient raftClient;
@@ -39,6 +36,9 @@ public class ElectComponent {
 
     @Inject
     ElectState electState;
+
+    @Inject
+    EventBus bus;
 
     @PostConstruct
     public void init() {
@@ -72,37 +72,52 @@ public class ElectComponent {
                 .build();
     }
 
-    public Multi<AppendLogRes> appendEntry(Multi<AppendLogReq> request) {
-        List<AppendLogRes> resList = new ArrayList<>();
-        request.onItem().invoke(item -> {
-            if (item.getLogData().isEmpty()) {
-                // heartbeat
-                if (item.getTerm() > electState.getTerm().get()) {
-                    electState.becomeFollower(item.getLeaderId(), item.getTerm());
-                    return;
-                }
-                if (item.getTerm() < electState.getTerm().get()) {
-                    resList.add(AppendLogRes.newBuilder()
-                            .setResult(AppendLogRes.AppendResult.NOT_LEADER)
-                            .setLeaderId(electState.getLeaderId())
-                            .setMyId(RaftUtils.getIdByHost(null))
-                            .build());
-                    return;
-                }
-                // normal term
-                if (electState.getState() == RaftStateEnum.COORDINATOR) {
-                    electState.becomeFollower(item.getLeaderId(), item.getTerm());
-                    return;
-                }
-                if (electState.getState() == RaftStateEnum.FOLLOWER) {
-                    electState.setLastLeaderHeartbeatTime(System.currentTimeMillis());
-                    return;
-                }
+    public AppendLogRes appendEntry(AppendLogReq item) {
+        if (item.getLogData().isEmpty()) {
+            if (item.getTerm() > electState.getTerm().get()) {
+                electState.becomeFollower(item.getLeaderId(), item.getTerm());
+                bus.publish(RaftConstant.LOG_SYNC_TOPIC, item.getLogIndex());
+                waitForSync(item.getLogIndex());
+                return AppendLogRes.newBuilder()
+                        .setResult(AppendLogRes.AppendResult.SUCCESS)
+                        .setLeaderId(item.getLeaderId())
+                        .setNextIndex(logProxy.getLastKey() + 1)
+                        .setMyId(RaftUtils.getIdByHost(null))
+                        .build();
             }
-            // todo log append
+            if (item.getTerm() < electState.getTerm().get()) {
+                return AppendLogRes.newBuilder()
+                        .setResult(AppendLogRes.AppendResult.NOT_LEADER)
+                        .setLeaderId(electState.getLeaderId())
+                        .setNextIndex(logProxy.getLastKey() + 1)
+                        .setMyId(RaftUtils.getIdByHost(null))
+                        .build();
+            }
+            if (electState.getState() == RaftStateEnum.FOLLOWER) {
+                bus.publish(RaftConstant.LOG_SYNC_TOPIC, item.getLogIndex());
+                electState.setLastLeaderHeartbeatTime(System.currentTimeMillis());
+                waitForSync(item.getLogIndex());
+                return AppendLogRes.newBuilder()
+                        .setResult(AppendLogRes.AppendResult.SUCCESS)
+                        .setLeaderId(item.getLeaderId())
+                        .setNextIndex(logProxy.getLastKey() + 1)
+                        .setMyId(RaftUtils.getIdByHost(null))
+                        .build();
+            }
+        }
+        // leader write data
+        return null;
+    }
 
-        });
-        return Multi.createFrom().items(resList.stream());
+    @SuppressWarnings("BusyWait")
+    private void waitForSync(long target) {
+        while (logProxy.getLastKey() < target) {
+            try {
+                Thread.sleep(1);
+            } catch (InterruptedException e) {
+                // ignore
+            }
+        }
     }
 
     public ReadIndexRes readIndex(ReadIndexReq readIndexReq) {

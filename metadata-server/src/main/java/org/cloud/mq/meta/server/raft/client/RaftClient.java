@@ -8,6 +8,9 @@ import io.quarkus.scheduler.Scheduled;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import lombok.extern.slf4j.Slf4j;
+import org.cloud.mq.meta.api.BrokerRegisterReply;
+import org.cloud.mq.meta.api.BrokerRegisterRequest;
+import org.cloud.mq.meta.api.MetaBrokerServiceGrpc;
 import org.cloud.mq.meta.raft.*;
 import org.cloud.mq.meta.server.interceptor.GrpcClientInterceptor;
 import org.cloud.mq.meta.server.raft.common.RaftUtils;
@@ -89,6 +92,28 @@ public class RaftClient {
     public StreamObserver<AppendLogReq> appendLog(ManagedChannel managedChannel, StreamObserver<AppendLogRes> streamObserver) {
         RaftServerServiceGrpc.RaftServerServiceStub raftServerServiceStub = RaftServerServiceGrpc.newStub(managedChannel).withDeadlineAfter(2, TimeUnit.SECONDS);
         return raftServerServiceStub.appendEntries(streamObserver);
+    }
+
+    /**
+     * read index
+     * @param managedChannel channel
+     * @param readIndexReq read req
+     * @return read res
+     */
+    public ReadIndexRes readIndex(ManagedChannel managedChannel, ReadIndexReq readIndexReq) {
+        RaftServerServiceGrpc.RaftServerServiceBlockingStub raftServerServiceBlockingStub = RaftServerServiceGrpc.newBlockingStub(managedChannel);
+        return raftServerServiceBlockingStub.readIndex(readIndexReq);
+    }
+
+    /**
+     * broker registry
+     * @param managedChannel channel
+     * @param brokerRegisterRequest registry req
+     * @return res
+     */
+    public BrokerRegisterReply registryBroker(ManagedChannel managedChannel, BrokerRegisterRequest brokerRegisterRequest) {
+        MetaBrokerServiceGrpc.MetaBrokerServiceBlockingStub metaBrokerServiceBlockingStub = MetaBrokerServiceGrpc.newBlockingStub(managedChannel);
+        return metaBrokerServiceBlockingStub.brokerRegister(brokerRegisterRequest);
     }
 
     /**

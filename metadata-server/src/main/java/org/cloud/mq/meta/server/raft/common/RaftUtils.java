@@ -21,4 +21,12 @@ public class RaftUtils {
         return Integer.parseInt(hostnames[hostnames.length - 1]);
     }
 
+    public static String getMyHostName() {
+        String hostname = System.getenv("HOSTNAME");
+        if (StringUtil.isNullOrEmpty(hostname)) {
+            return "UNKNOWN";
+        }
+        return hostname;
+    }
+
 }

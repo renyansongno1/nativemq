@@ -12,8 +12,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.cloud.mq.meta.raft.AppendLogReq;
 import org.cloud.mq.meta.raft.AppendLogRes;
 import org.cloud.mq.meta.raft.RaftVoteRes;
+import org.cloud.mq.meta.raft.ReadIndexRes;
 import org.cloud.mq.meta.server.raft.client.RaftClient;
 import org.cloud.mq.meta.server.raft.common.RaftUtils;
+import org.cloud.mq.meta.server.raft.election.RaftComponent;
 import org.cloud.mq.meta.server.raft.election.ElectState;
 import org.cloud.mq.meta.server.raft.election.RaftStateEnum;
 import org.cloud.mq.meta.server.raft.election.follower.RaftFollowerComponent;
@@ -62,6 +64,9 @@ public class RaftCoreTest {
 
     @Inject
     RaftFollowerComponent followerComponent;
+
+    @Inject
+    RaftComponent raftComponent;
 
     @BeforeEach
     void beforeRaftTest() {
@@ -243,6 +248,34 @@ public class RaftCoreTest {
         await().atMost(Duration.ofSeconds(2)).untilAsserted(() ->
                 assertThat(electState.getLeaderId()).isEqualTo(0)
         );
+    }
+
+    @Test
+    void followerReceiveHeartbeatTest() {
+        // become follower
+        voteExpireTest();
+        // mock read index
+        Mockito.when(raftClient.readIndex(
+                ArgumentMatchers.any(),
+                ArgumentMatchers.any()))
+                .thenReturn(ReadIndexRes.newBuilder()
+                        .setSuccess(true)
+                        .setNextIndex(2)
+                        .addLogDates(ByteString.EMPTY)
+                .build());
+        // send heartbeat
+        AppendLogReq appendLogReq = AppendLogReq.newBuilder()
+                .setLeaderId(2)
+                .setTerm(100)
+                .setLogIndex(1)
+                .build();
+        AppendLogRes appendLogRes = raftComponent.appendEntry(appendLogReq);
+        assertThat(appendLogRes.getResult()).isEqualTo(AppendLogRes.AppendResult.SUCCESS);
+    }
+
+    @Test
+    void readIndexTest() {
+
     }
 
 }

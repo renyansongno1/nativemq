@@ -5,6 +5,7 @@ import io.quarkus.scheduler.Scheduled;
 import jakarta.enterprise.context.ApplicationScoped;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
+import org.cloud.mq.meta.server.raft.common.RaftUtils;
 
 import javax.naming.Context;
 import javax.naming.NamingException;
@@ -71,7 +72,7 @@ public class PeerFinder {
      * @return peer list
      */
     public List<String> getOtherPeer() {
-        String hostname = System.getenv("HOSTNAME");
+        String hostname = RaftUtils.getMyHostName();
         ArrayList<String> list = Lists.newArrayList(PEER_HOST_SET);
         list.removeIf(s -> s.startsWith(hostname));
         return list;

@@ -34,4 +34,9 @@ public class RaftConstant {
      * raft state change bus topic
      */
     public static final String RAFT_STATE_TOPIC = "RAFT_STATE_TOPIC";
+
+    /**
+     * notify follower sync log
+     */
+    public static final String LOG_SYNC_TOPIC = "LOG_SYNC_TOPIC";
 }
