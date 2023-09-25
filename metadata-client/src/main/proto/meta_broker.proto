@@ -15,7 +15,7 @@ service MetaBrokerService {
 
 // The request message containing the user's name.
 message BrokerRegisterRequest {
-    int32 id = 1;
+    string id = 1;
     string name = 2;
     string Cluster = 3;
     string ip = 4;
@@ -23,6 +23,22 @@ message BrokerRegisterRequest {
     string cpu = 6;
     string memory = 7;
     string status = 8;
+}
+
+message BrokerUpdateRequest {
+   string id = 1;
+   string name = 2;
+   string Cluster = 3;
+   string ip = 4;
+   string domain = 5;
+   string cpu = 6;
+   string memory = 7;
+   string status = 8;
+}
+
+message BrokerDeleteRequest {
+  string id = 1;
+  string Cluster = 2;
 }
 
 // The response message containing the greetings

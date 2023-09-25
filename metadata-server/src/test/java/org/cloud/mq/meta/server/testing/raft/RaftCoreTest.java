@@ -39,6 +39,7 @@ import org.mockito.MockitoAnnotations;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -317,7 +318,7 @@ public class RaftCoreTest {
         voteSuccessTest();
         BrokerRegisterRequest request = BrokerRegisterRequest.newBuilder()
                 .setCluster("test")
-                .setId(1)
+                .setId(UUID.randomUUID().toString())
                 .setIp("127.0.0.1")
                 .build();
         AtomicBoolean success = new AtomicBoolean(false);

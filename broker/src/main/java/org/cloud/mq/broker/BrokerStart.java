@@ -16,6 +16,7 @@ import java.io.IOException;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.Properties;
+import java.util.UUID;
 
 /**
  * start
@@ -40,6 +41,7 @@ public class BrokerStart {
         BrokerRegisterRequest registerRequest = null;
         try {
             registerRequest = BrokerRegisterRequest.newBuilder()
+                    .setId(UUID.randomUUID().toString())
                     .setCluster(brokerConfig.getCluster())
                     .setCpu(String.valueOf(Runtime.getRuntime().availableProcessors()))
                     .setMemory(Runtime.getRuntime().totalMemory() / 1024 / 1024 +"M")
