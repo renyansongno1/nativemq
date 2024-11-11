@@ -44,11 +44,11 @@ public class RaftFollowerComponent {
             return;
         }
         if (message.body() == RaftStateEnum.FOLLOWER) {
-            becomeFollower(electState.getLeaderId(), electState.getTerm().get());
+            becomeFollower();
         }
     }
 
-    private void becomeFollower(int leaderId, int term) {
+    private void becomeFollower() {
         if (log.isDebugEnabled()) {
             log.debug("id:{}, become follower, now LeaderId:{}, term:{}", RaftUtils.getIdByHost(null), electState.getLeaderId(), electState.getTerm().get());
         }
@@ -64,7 +64,6 @@ public class RaftFollowerComponent {
             if (!e.getMessage().contains("A job with this identity is already scheduled")) {
                 log.error("schedule error", e);
             }
-            return;
         }
     }
 

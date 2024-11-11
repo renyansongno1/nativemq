@@ -33,6 +33,14 @@ public class ElectState {
     @Setter
     private long lastLeaderHeartbeatTime;
 
+    @Getter
+    @Setter
+    private volatile boolean ready = false;
+
+    @Getter
+    @Setter
+    private long maxUnCommitId;
+
     /**
      * becomeCandidate
      */

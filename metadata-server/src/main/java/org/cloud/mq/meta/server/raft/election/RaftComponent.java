@@ -42,7 +42,7 @@ public class RaftComponent {
 
     @PostConstruct
     public void init() {
-        electState.becomeCandidate();
+        Thread.ofVirtual().start(() -> electState.becomeCandidate());
     }
 
     /**
@@ -51,18 +51,33 @@ public class RaftComponent {
      * @return res
      */
     public RaftVoteRes receiveVote(RaftVoteReq request) {
-        if (request.getTerm() > electState.getTerm().get()
-                || electState.getLeaderId() == -1) {
+        // only candidate can vote
+        if (electState.getState() != RaftStateEnum.CANDIDATE) {
+            return RaftVoteRes.newBuilder()
+                    .setResult(RaftVoteRes.Result.REJECT)
+                    .setLeaderId(electState.getLeaderId())
+                    .setTerm(electState.getTerm().get())
+                    .build();
+        }
+        if (request.getTerm() > electState.getTerm().get()) {
             // accept vote
             electState.becomeFollower(request.getLeaderId(), request.getTerm());
             return RaftVoteRes.newBuilder()
                     .setResult(RaftVoteRes.Result.ACCEPT)
                     .build();
+        // term expire
         } else if (request.getTerm() < electState.getTerm().get()) {
             return RaftVoteRes.newBuilder()
                     .setResult(RaftVoteRes.Result.TERM_EXPIRE)
                     .setLeaderId(electState.getLeaderId())
                     .setTerm(electState.getTerm().get())
+                    .build();
+        // same term but higher max un commit log id
+        } else if (request.getMaxUnCommitLogId() > electState.getMaxUnCommitId()) {
+            // accept vote
+            electState.becomeFollower(request.getLeaderId(), request.getTerm());
+            return RaftVoteRes.newBuilder()
+                    .setResult(RaftVoteRes.Result.ACCEPT)
                     .build();
         }
         return RaftVoteRes.newBuilder()
@@ -108,6 +123,8 @@ public class RaftComponent {
         // leader write data
         long nextKey = logProxy.getLastKey() + 1;
         logProxy.appendLog(nextKey, item.getLogData().toByteArray());
+        // store max un commit id
+        electState.setMaxUnCommitId(nextKey);
         return AppendLogRes.newBuilder()
                 .setResult(AppendLogRes.AppendResult.SUCCESS)
                 .setLeaderId(item.getLeaderId())

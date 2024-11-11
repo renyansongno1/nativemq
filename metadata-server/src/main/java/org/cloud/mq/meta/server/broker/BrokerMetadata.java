@@ -1,12 +1,14 @@
 package org.cloud.mq.meta.server.broker;
 
 import com.google.gson.Gson;
+import io.quarkus.vertx.ConsumeEvent;
 import jakarta.enterprise.context.ApplicationScoped;
 import lombok.*;
 import lombok.extern.slf4j.Slf4j;
 import org.cloud.mq.meta.api.BrokerDeleteRequest;
 import org.cloud.mq.meta.api.BrokerRegisterRequest;
 import org.cloud.mq.meta.api.BrokerUpdateRequest;
+import org.cloud.mq.meta.server.common.MetadataConstant;
 import org.cloud.mq.meta.server.common.MetadataDefinition;
 import org.cloud.mq.meta.server.common.MetadataTypeEnum;
 
@@ -34,10 +36,11 @@ public class BrokerMetadata {
      * add broker Metadata
      * @param metadataDefinition Metadata define
      */
+    @ConsumeEvent(value = MetadataConstant.METADATA_CHANGE_TOPIC, blocking = true)
     @SuppressWarnings({"ReassignedVariable", "SynchronizationOnLocalVariableOrMethodParameter"})
     public void putBroker(MetadataDefinition metadataDefinition) {
         if (metadataDefinition.getMetadataTypeEnum() != MetadataTypeEnum.BROKER) {
-            throw new BrokerMetadataException("not broker metadata");
+            return;
         }
         switch (metadataDefinition.getMetadataOperateEnum()) {
             case ADD -> {
@@ -126,6 +129,14 @@ public class BrokerMetadata {
             case null, default -> throw new BrokerMetadataException("not support operate");
         }
 
+    }
+
+    /**
+     * Get broker Metadata entry
+     * @return entry set
+     */
+    public Set<Map.Entry<String, Set<BrokerItem>>> getAllBrokerMetadata() {
+        return BROKER_MAP.entrySet();
     }
 
     /**

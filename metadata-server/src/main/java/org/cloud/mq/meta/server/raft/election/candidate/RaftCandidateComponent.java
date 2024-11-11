@@ -34,7 +34,7 @@ public class RaftCandidateComponent {
     @ConsumeEvent(RaftConstant.RAFT_STATE_TOPIC)
     public void consumeStateEvent(Message<RaftStateEnum> message) {
         if (message.body() == RaftStateEnum.CANDIDATE) {
-            becomeCandidateInit(RaftUtils.getIdByHost(null), logProxy.getLastKey(), electState.getTerm());
+            Thread.ofVirtual().start(() -> becomeCandidateInit(RaftUtils.getIdByHost(null), electState.getMaxUnCommitId(), electState.getTerm()));
         }
     }
 
@@ -42,7 +42,12 @@ public class RaftCandidateComponent {
         if (log.isDebugEnabled()) {
             log.debug("id:{}, become candidate", myId);
         }
-        vote(logIndex, myId, term);
+        try {
+            vote(logIndex, myId, term);
+        } catch (Exception e) {
+            log.error("vote error", e);
+            electState.becomeFollower(-1, electState.getTerm().incrementAndGet());
+        }
     }
 
     @SuppressWarnings("BusyWait")
@@ -60,13 +65,14 @@ public class RaftCandidateComponent {
             RaftVoteReq raftVoteReq = RaftVoteReq.newBuilder()
                     // always vote for myself
                     .setLeaderId(myId)
-                    .setLogIndex(localLogIndex)
+                    .setMaxUnCommitLogId(localLogIndex)
                     .setTerm(term.addAndGet(1))
                     .build();
             if (log.isDebugEnabled()) {
                 log.debug("start req vote, vote body:{}", raftVoteReq);
             }
             int vote = 1;
+            int rejectVote = 0;
             for (ManagedChannel managedChannel : raftClient.getAllChannel()) {
                 try {
                     RaftVoteRes raftVoteRes = raftClient.sendVote(managedChannel, raftVoteReq);
@@ -78,6 +84,9 @@ public class RaftCandidateComponent {
                             electState.becomeFollower(raftVoteRes.getLeaderId(), raftVoteRes.getTerm());
                             return;
                         }
+                    } else {
+                        // reject vote
+                        rejectVote++;
                     }
                 } catch (Exception e) {
                     log.error("vote for channel:{}, error", managedChannel, e);
@@ -86,6 +95,9 @@ public class RaftCandidateComponent {
             if (vote > (raftClient.getAllChannel().size() + 1)/2) {
                 electState.becomeLeader();
                 break;
+            }
+            if (rejectVote > (raftClient.getAllChannel().size() + 1)/2) {
+                vote(localLogIndex, myId, term);
             }
         }
     }

@@ -13,12 +13,13 @@ import jakarta.inject.Inject;
 import lombok.extern.slf4j.Slf4j;
 import org.cloud.mq.meta.api.BrokerRegisterReply;
 import org.cloud.mq.meta.api.BrokerRegisterRequest;
-import org.cloud.mq.meta.api.MetaBrokerService;
 import org.cloud.mq.meta.raft.AppendLogReq;
 import org.cloud.mq.meta.raft.AppendLogRes;
 import org.cloud.mq.meta.raft.RaftVoteRes;
 import org.cloud.mq.meta.raft.ReadIndexRes;
+import org.cloud.mq.meta.server.broker.BrokerMetadata;
 import org.cloud.mq.meta.server.common.MetadataDefinition;
+import org.cloud.mq.meta.server.common.MetadataOperateEnum;
 import org.cloud.mq.meta.server.common.MetadataTypeEnum;
 import org.cloud.mq.meta.server.raft.client.RaftClient;
 import org.cloud.mq.meta.server.raft.common.RaftUtils;
@@ -28,6 +29,7 @@ import org.cloud.mq.meta.server.raft.election.RaftStateEnum;
 import org.cloud.mq.meta.server.raft.election.follower.RaftFollowerComponent;
 import org.cloud.mq.meta.server.raft.election.heartbeat.HeartbeatComponent;
 import org.cloud.mq.meta.server.raft.election.heartbeat.HeartbeatStreamObserver;
+import org.cloud.mq.meta.server.raft.election.leader.RaftLeaderComponent;
 import org.cloud.mq.meta.server.raft.log.LogProxy;
 import org.cloud.mq.meta.server.raft.peer.PeerWaterMark;
 import org.junit.jupiter.api.AfterEach;
@@ -37,8 +39,11 @@ import org.mockito.ArgumentMatchers;
 import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
 
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -88,6 +93,12 @@ public class RaftCoreTest {
 
     @Inject
     LogProxy logProxy;
+
+    @Inject
+    RaftLeaderComponent raftLeaderComponent;
+
+    @Inject
+    BrokerMetadata brokerMetadata;
 
     @BeforeEach
     void beforeRaftTest() {
@@ -336,6 +347,34 @@ public class RaftCoreTest {
         String s = new String(bytes);
         MetadataDefinition metadataDefinition = new Gson().fromJson(s, MetadataDefinition.class);
         assertThat(metadataDefinition.getMetadataTypeEnum() == MetadataTypeEnum.BROKER).isTrue();
+    }
+
+    @Test
+    void reloadRaftLogTest() {
+        voteSuccessTest();
+        BrokerRegisterRequest request = BrokerRegisterRequest.newBuilder()
+                .setCluster("reloadRaftLogTest")
+                .setId(UUID.randomUUID().toString())
+                .setIp("127.0.0.1")
+                .build();
+        MetadataDefinition metadataDefinition = MetadataDefinition.builder()
+                .metadataTypeEnum(MetadataTypeEnum.BROKER)
+                .metadataOperateEnum(MetadataOperateEnum.ADD)
+                .dataJson(new Gson().toJson(request))
+                .build();
+        logProxy.appendLog(1, new Gson().toJson(metadataDefinition).getBytes(StandardCharsets.UTF_8));
+
+        raftLeaderComponent.reloadRaftLog();
+        await().atMost(Duration.ofSeconds(2)).untilAsserted(() -> assertThat(electState.isReady()).isTrue());
+
+        boolean res = false;
+        for (Map.Entry<String, Set<BrokerMetadata.BrokerItem>> allBrokerMetadataEntry : brokerMetadata.getAllBrokerMetadata()) {
+            if (allBrokerMetadataEntry.getKey().equals("reloadRaftLogTest")) {
+                res = true;
+                break;
+            }
+        }
+        assertThat(res).isTrue();
     }
 
 }

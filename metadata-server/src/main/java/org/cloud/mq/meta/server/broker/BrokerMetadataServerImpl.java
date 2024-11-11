@@ -6,6 +6,7 @@ import io.grpc.ManagedChannel;
 import io.quarkus.grpc.GrpcService;
 import io.smallrye.mutiny.Uni;
 import jakarta.inject.Inject;
+import lombok.extern.slf4j.Slf4j;
 import org.cloud.mq.meta.api.BrokerRegisterReply;
 import org.cloud.mq.meta.api.BrokerRegisterRequest;
 import org.cloud.mq.meta.api.MetaBrokerService;
@@ -27,6 +28,7 @@ import java.nio.charset.StandardCharsets;
  * @author renyansong
  */
 @GrpcService
+@Slf4j
 public class BrokerMetadataServerImpl implements MetaBrokerService {
 
     private static final Gson GSON = new Gson();
@@ -43,12 +45,22 @@ public class BrokerMetadataServerImpl implements MetaBrokerService {
     @Inject
     PeerWaterMark peerWaterMark;
 
+    @Inject
+    BrokerMetadata brokerMetadata;
+
     @Override
     public Uni<BrokerRegisterReply> brokerRegister(BrokerRegisterRequest request) {
         if (electState.getState() != RaftStateEnum.LEADER) {
             // re req for leader
             ManagedChannel channel = raftClient.getChannelById(electState.getLeaderId());
             return Uni.createFrom().item(raftClient.registryBroker(channel, request));
+        }
+        if (!electState.isReady()) {
+            log.warn("raft component is not ready");
+            BrokerRegisterReply reply = BrokerRegisterReply.newBuilder()
+                    .setSuccess(false)
+                    .build();
+            return Uni.createFrom().item(reply);
         }
         MetadataDefinition metadataDefinition = MetadataDefinition.builder()
                 .metadataTypeEnum(MetadataTypeEnum.BROKER)
@@ -76,6 +88,8 @@ public class BrokerMetadataServerImpl implements MetaBrokerService {
                     .build();
             return Uni.createFrom().item(reply);
         }
+        // update Metadata
+        brokerMetadata.putBroker(metadataDefinition);
         BrokerRegisterReply reply = BrokerRegisterReply.newBuilder()
                 .setSuccess(true)
                 .build();

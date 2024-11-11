@@ -1,5 +1,6 @@
 package org.cloud.mq.meta.server.raft.log;
 
+import com.google.common.collect.Maps;
 import com.google.common.primitives.Longs;
 import io.quarkus.runtime.Startup;
 import jakarta.annotation.PostConstruct;
@@ -18,6 +19,7 @@ import java.nio.file.Path;
 import java.nio.file.Files;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
+import java.util.Map;
 
 /**
  * raft log proxy
@@ -119,6 +121,20 @@ public class LogProxy {
             return Longs.fromByteArray(iter.key());
         }
         return 0;
+    }
+
+    /**
+     * Get all kv
+     * @return kv map
+     */
+    public Map<Long, byte[]> getAllLogData() {
+        Map<Long, byte[]> resMap = Maps.newTreeMap();
+        try (final RocksIterator iterator = rocksDb.newIterator()) {
+            for (iterator.seekToFirst(); iterator.isValid(); iterator.next()) {
+                resMap.put(Longs.fromByteArray(iterator.key()), iterator.value());
+            }
+        }
+        return resMap;
     }
 
     /**

@@ -26,8 +26,8 @@ message RaftVoteReq {
   int32 leaderId = 1;
   // leader term
   int32 term = 2;
-  // log index
-  int64 logIndex = 3;
+  // max un commit log id
+  int64 maxUnCommitLogId = 3;
 }
 
 // vote response
