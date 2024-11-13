@@ -80,8 +80,8 @@ spec:
             timeoutSeconds: 10
           resources:
             limits:
-              cpu: 1000m
-              memory: 512Mi
+              cpu: 6000m
+              memory: 1024Mi
             requests:
               cpu: 250m
               memory: 64Mi
@@ -109,6 +109,5 @@ spec:
         resources:
           requests:
             storage: 1Gi
-        volumeName: metadata-log-pv
         storageClassName: local-path
 ---

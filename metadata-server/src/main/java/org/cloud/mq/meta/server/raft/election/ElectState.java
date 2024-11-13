@@ -37,14 +37,13 @@ public class ElectState {
     @Setter
     private volatile boolean ready = false;
 
-    @Getter
-    @Setter
-    private long maxUnCommitId;
-
     /**
      * becomeCandidate
      */
     public void becomeCandidate() {
+        if (log.isDebugEnabled()) {
+            log.debug("become candidate, leaderId:{}, term:{}, now state:{}", leaderId, term, getState());
+        }
         if (STATE.compareAndSet(null, RaftStateEnum.CANDIDATE)
                 || STATE.compareAndSet(RaftStateEnum.FOLLOWER, RaftStateEnum.CANDIDATE)) {
             bus.publish(RaftConstant.RAFT_STATE_TOPIC, RaftStateEnum.CANDIDATE);
@@ -54,6 +53,9 @@ public class ElectState {
     }
 
     public void becomeFollower(int leaderId, int term) {
+        if (log.isDebugEnabled()) {
+            log.debug("become follower,leaderId:{}, term:{}, now state:{}", leaderId, term, getState());
+        }
         if (STATE.get() == RaftStateEnum.FOLLOWER) {
             // Update leader and term
             setLeaderId(leaderId);
@@ -71,6 +73,9 @@ public class ElectState {
     }
 
     public void becomeLeader() {
+        if (log.isDebugEnabled()) {
+            log.debug("become leader,leaderId:{}, term:{}, now state:{}", leaderId, term, getState());
+        }
         if (STATE.compareAndSet(RaftStateEnum.CANDIDATE, RaftStateEnum.LEADER)
                 || STATE.compareAndSet(RaftStateEnum.FOLLOWER, RaftStateEnum.LEADER)) {
             setLeaderId(RaftUtils.getIdByHost(null));

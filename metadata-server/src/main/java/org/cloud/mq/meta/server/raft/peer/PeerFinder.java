@@ -59,6 +59,9 @@ public class PeerFinder {
                     PEER_HOST_SET.add(oneDomain);
                 }
             }
+        } catch (javax.naming.NameNotFoundException e) {
+            // ignore
+            log.warn("ignore name not found exception for:{}", e.getMessage());
         } catch (NamingException e) {
             log.error("naming error", e);
         }

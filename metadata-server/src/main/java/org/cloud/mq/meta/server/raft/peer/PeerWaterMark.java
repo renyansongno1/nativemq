@@ -11,6 +11,7 @@ import org.cloud.mq.meta.server.raft.election.RaftConstant;
 import org.cloud.mq.meta.server.raft.log.LogProxy;
 
 import java.time.Duration;
+import java.util.Map;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Condition;
@@ -40,10 +41,18 @@ public class PeerWaterMark {
             }))
             .build();
 
+    @Getter
     private long highWaterMark;
 
     public void syncHighWaterMark(long logIndex) {
         this.highWaterMark = logIndex;
+    }
+
+    /**
+     * get all peer map
+     */
+    public Map<String, PeerItem> getPeerMap() {
+        return WATER_MARK_CACHE.asMap();
     }
 
     /**
@@ -121,7 +130,7 @@ public class PeerWaterMark {
     @Getter
     @Setter
     @ToString
-    private static class PeerItem {
+    public static class PeerItem {
 
         private String peer;
 

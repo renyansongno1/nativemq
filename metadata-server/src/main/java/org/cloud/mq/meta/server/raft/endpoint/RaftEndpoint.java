@@ -1,5 +1,6 @@
 package org.cloud.mq.meta.server.raft.endpoint;
 
+import com.google.gson.Gson;
 import io.smallrye.mutiny.Uni;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.GET;
@@ -15,6 +16,8 @@ import org.cloud.mq.meta.server.raft.election.RaftComponent;
 @Slf4j
 public class RaftEndpoint {
 
+    private static final Gson GSON = new Gson();
+
     @Inject
     RaftComponent raftComponent;
 
@@ -23,11 +26,11 @@ public class RaftEndpoint {
      * @return res
      */
     @GET
-    public Uni<RaftComponent> getElectStatus() {
+    public Uni<String> getElectStatus() {
         if (log.isDebugEnabled()) {
             log.debug("req raft status, component is :{}", raftComponent);
         }
-        return Uni.createFrom().item(raftComponent);
+        return Uni.createFrom().item(GSON.toJson(raftComponent));
     }
 
 }

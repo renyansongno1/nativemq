@@ -1,5 +1,6 @@
 package org.cloud.mq.meta.server.common;
 
+import io.quarkus.runtime.annotations.RegisterForReflection;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.Setter;
@@ -13,6 +14,7 @@ import lombok.ToString;
 @Setter
 @ToString
 @Builder
+@RegisterForReflection
 public class MetadataDefinition {
 
     /**

@@ -7,7 +7,6 @@ import io.vertx.core.eventbus.Message;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import lombok.extern.slf4j.Slf4j;
-import org.cloud.mq.meta.raft.RaftServerServiceGrpc;
 import org.cloud.mq.meta.raft.ReadIndexReq;
 import org.cloud.mq.meta.raft.ReadIndexRes;
 import org.cloud.mq.meta.server.raft.client.RaftClient;
@@ -17,6 +16,8 @@ import org.cloud.mq.meta.server.raft.election.RaftConstant;
 import org.cloud.mq.meta.server.raft.election.RaftStateEnum;
 import org.cloud.mq.meta.server.raft.log.LogProxy;
 
+import java.util.concurrent.atomic.AtomicBoolean;
+
 /**
  * follower
  * @author renyansong
@@ -24,6 +25,8 @@ import org.cloud.mq.meta.server.raft.log.LogProxy;
 @ApplicationScoped
 @Slf4j
 public class RaftFollowerComponent {
+
+    private final AtomicBoolean syncTaskStarted = new AtomicBoolean(false);
 
     @Inject
     Scheduler scheduler;
@@ -52,6 +55,8 @@ public class RaftFollowerComponent {
         if (log.isDebugEnabled()) {
             log.debug("id:{}, become follower, now LeaderId:{}, term:{}", RaftUtils.getIdByHost(null), electState.getLeaderId(), electState.getTerm().get());
         }
+        // reset heartbeat time
+        electState.setLastLeaderHeartbeatTime(System.currentTimeMillis());
         // start leader heartbeat listener
         try {
             scheduler.newJob(RaftConstant.HEARTBEAT_LISTEN_SCHEDULER)
@@ -60,6 +65,9 @@ public class RaftFollowerComponent {
                         leaderHeartbeatCheck();
                     })
                     .schedule();
+
+            // start follower sync log task
+            Thread.ofVirtual().start(this::followerSyncLogTask);
         } catch (IllegalStateException e) {
             if (!e.getMessage().contains("A job with this identity is already scheduled")) {
                 log.error("schedule error", e);
@@ -79,18 +87,24 @@ public class RaftFollowerComponent {
     }
 
     @SuppressWarnings("BusyWait")
-    @ConsumeEvent(value = RaftConstant.LOG_SYNC_TOPIC)
-    public void followerSyncLogTask(long logIndex) {
-        while (electState.getState() != RaftStateEnum.FOLLOWER) {
-            try {
-                Thread.sleep(10);
-            } catch (InterruptedException ex) {
-                // ignore...
-            }
+    public void followerSyncLogTask() {
+        if (log.isDebugEnabled()) {
+            log.debug("followerSyncLogTask... started? :{}", syncTaskStarted.get());
         }
-        long nextIndex = -1;
-        while (electState.getState() == RaftStateEnum.FOLLOWER && nextIndex < logIndex) {
+        if (syncTaskStarted.get()) {
+            log.warn("followerSyncLogTask started, ignore...");
+            return;
+        }
+        if (syncTaskStarted.compareAndExchange(false, true)) {
+            log.warn("followerSyncLogTask start clash... ignore, now state:{}", syncTaskStarted.get());
+            return;
+        }
+        log.info("followerSyncLogTask start...");
+        while (electState.getState() == RaftStateEnum.FOLLOWER) {
             long localLogIndex = logProxy.getLastKey();
+            if (log.isDebugEnabled()) {
+                log.debug("start sync log, now state:{}, localLogIndex:{}", electState.getState(), localLogIndex);
+            }
             try {
                 ManagedChannel channelById = raftClient.getChannelById(electState.getLeaderId());
                 if (channelById == null) {
@@ -104,22 +118,27 @@ public class RaftFollowerComponent {
                 }
                 ReadIndexReq readIndexReq = ReadIndexReq.newBuilder()
                         .setTerm(electState.getTerm().get())
-                        .setStartIndex(localLogIndex)
+                        .setStartIndex(localLogIndex + 1)
                         .setFromHost(RaftUtils.getMyHostName())
                         .build();
                 ReadIndexRes readIndexRes = raftClient.readIndex(channelById, readIndexReq);
                 if (!readIndexRes.getSuccess()) {
-                    if (readIndexRes.getNextIndex() != -1) {
-                        while (localLogIndex > readIndexRes.getNextIndex()) {
-                            logProxy.deleteByIndex(localLogIndex);
-                            localLogIndex--;
-                        }
+                    // zero is not complete heartbeat
+                    while (readIndexRes.getNextIndex() != 0 && localLogIndex >= readIndexRes.getNextIndex()) {
+                        log.warn("sync log find error log, now local log index:{}, > leader next index:{}", localLogIndex, readIndexRes.getNextIndex());
+                        logProxy.deleteByIndex(localLogIndex);
+                        localLogIndex--;
+                    }
+                    // sleep
+                    try {
+                        Thread.sleep(1000);
+                    } catch (InterruptedException ex) {
+                        // ignore...
                     }
                 }
                 if (readIndexRes.getSuccess()) {
-                    nextIndex = readIndexRes.getNextIndex();
-                    // append log log
-                    logProxy.appendLog(logIndex, readIndexRes.getLogDates(0).toByteArray());
+                    // append log
+                    logProxy.appendLog(localLogIndex + 1, readIndexRes.getLogDates().toByteArray());
                 }
             } catch (Exception e) {
                 log.error("follower sync log thread error catch, sleep...", e);
@@ -130,6 +149,7 @@ public class RaftFollowerComponent {
                 }
             }
         }
+        syncTaskStarted.set(false);
     }
 
 }

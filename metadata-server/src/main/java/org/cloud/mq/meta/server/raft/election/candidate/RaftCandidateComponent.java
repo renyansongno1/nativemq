@@ -1,6 +1,7 @@
 package org.cloud.mq.meta.server.raft.election.candidate;
 
 import io.grpc.ManagedChannel;
+import io.quarkus.scheduler.Scheduler;
 import io.quarkus.vertx.ConsumeEvent;
 import io.vertx.core.eventbus.Message;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -31,10 +32,13 @@ public class RaftCandidateComponent {
     @Inject
     ElectState electState;
 
+    @Inject
+    Scheduler scheduler;
+
     @ConsumeEvent(RaftConstant.RAFT_STATE_TOPIC)
     public void consumeStateEvent(Message<RaftStateEnum> message) {
         if (message.body() == RaftStateEnum.CANDIDATE) {
-            Thread.ofVirtual().start(() -> becomeCandidateInit(RaftUtils.getIdByHost(null), electState.getMaxUnCommitId(), electState.getTerm()));
+            Thread.ofVirtual().start(() -> becomeCandidateInit(RaftUtils.getIdByHost(null), logProxy.getLastKey(), electState.getTerm()));
         }
     }
 
@@ -42,6 +46,8 @@ public class RaftCandidateComponent {
         if (log.isDebugEnabled()) {
             log.debug("id:{}, become candidate", myId);
         }
+        // from follower to candidate
+        scheduler.unscheduleJob(RaftConstant.HEARTBEAT_LISTEN_SCHEDULER);
         try {
             vote(logIndex, myId, term);
         } catch (Exception e) {
@@ -58,8 +64,11 @@ public class RaftCandidateComponent {
             } catch (InterruptedException e) {
                 // ignore
             }
-            if (raftClient.getAllChannel().isEmpty()) {
+            if (raftClient.getAllChannel().size() < 2) {
                 continue;
+            }
+            if (electState.getState() != RaftStateEnum.CANDIDATE) {
+                return;
             }
             // build vote req
             RaftVoteReq raftVoteReq = RaftVoteReq.newBuilder()

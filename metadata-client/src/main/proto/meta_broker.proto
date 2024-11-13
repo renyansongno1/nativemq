@@ -11,6 +11,19 @@ service MetaBrokerService {
   // Sends a greeting
   rpc BrokerRegister (BrokerRegisterRequest) returns (BrokerRegisterReply) {
   }
+  // find all broker
+  rpc FindAllBroker (FindAllBrokerRequest) returns (FindAllBrokerReply) {
+  }
+}
+
+// find broker req
+message FindAllBrokerRequest {
+  string Cluster = 1;
+}
+
+// find broker response message
+message FindAllBrokerReply {
+  repeated Broker brokerList = 1;
 }
 
 // The request message containing the user's name.
@@ -44,4 +57,16 @@ message BrokerDeleteRequest {
 // The response message containing the greetings
 message BrokerRegisterReply {
   bool success = 1;
+}
+
+// broker info
+message Broker {
+  string id = 1;
+  string name = 2;
+  string Cluster = 3;
+  string ip = 4;
+  string domain = 5;
+  string cpu = 6;
+  string memory = 7;
+  string status = 8;
 }

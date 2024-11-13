@@ -8,6 +8,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import lombok.extern.slf4j.Slf4j;
 import org.cloud.mq.meta.raft.AppendLogReq;
+import org.cloud.mq.meta.raft.RaftServerService;
 import org.cloud.mq.meta.server.raft.client.RaftClient;
 
 import java.time.Duration;

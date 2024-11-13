@@ -6,6 +6,7 @@ import jakarta.inject.Inject;
 import lombok.extern.slf4j.Slf4j;
 import org.cloud.mq.meta.raft.AppendLogRes;
 import org.cloud.mq.meta.server.raft.client.RaftClient;
+import org.cloud.mq.meta.server.raft.common.RaftUtils;
 import org.cloud.mq.meta.server.raft.election.ElectState;
 import org.cloud.mq.meta.server.raft.peer.PeerWaterMark;
 
@@ -26,6 +27,10 @@ public class HeartbeatStreamObserver implements StreamObserver<AppendLogRes> {
     @Inject
     PeerWaterMark peerWaterMark;
 
+    /**
+     * leader process other peer response
+     * @param appendLogRes response
+     */
     @Override
     public void onNext(AppendLogRes appendLogRes) {
         if (appendLogRes.getResult() == AppendLogRes.AppendResult.NOT_LEADER) {
@@ -43,7 +48,9 @@ public class HeartbeatStreamObserver implements StreamObserver<AppendLogRes> {
             if (log.isDebugEnabled()) {
                 log.debug("receive:{}, success heartbeat response", appendLogRes.getMyId());
             }
-            peerWaterMark.refreshPeerItem(raftClient.getPeerAddrByChannel(raftClient.getChannelById(appendLogRes.getMyId())));
+            String peerAddrByChannel = raftClient.getPeerAddrByChannel(raftClient.getChannelById(appendLogRes.getMyId()));
+            peerWaterMark.refreshPeerItem(RaftUtils.getShortHostName(peerAddrByChannel));
+            peerWaterMark.updateLowWaterMark(RaftUtils.getShortHostName(peerAddrByChannel), appendLogRes.getNextIndex() - 1);
         }
     }
 

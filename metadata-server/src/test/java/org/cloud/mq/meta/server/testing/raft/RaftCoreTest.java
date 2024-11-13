@@ -297,7 +297,7 @@ public class RaftCoreTest {
                 .thenReturn(ReadIndexRes.newBuilder()
                         .setSuccess(true)
                         .setNextIndex(2)
-                        .addLogDates(ByteString.EMPTY)
+                        .setLogDates(ByteString.EMPTY)
                 .build());
         // send heartbeat
         AppendLogReq appendLogReq = AppendLogReq.newBuilder()
@@ -364,7 +364,7 @@ public class RaftCoreTest {
                 .build();
         logProxy.appendLog(1, new Gson().toJson(metadataDefinition).getBytes(StandardCharsets.UTF_8));
 
-        raftLeaderComponent.reloadRaftLog();
+        raftComponent.reloadRaftLog();
         await().atMost(Duration.ofSeconds(2)).untilAsserted(() -> assertThat(electState.isReady()).isTrue());
 
         boolean res = false;

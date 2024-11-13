@@ -7,9 +7,7 @@ import io.quarkus.grpc.GrpcService;
 import io.smallrye.mutiny.Uni;
 import jakarta.inject.Inject;
 import lombok.extern.slf4j.Slf4j;
-import org.cloud.mq.meta.api.BrokerRegisterReply;
-import org.cloud.mq.meta.api.BrokerRegisterRequest;
-import org.cloud.mq.meta.api.MetaBrokerService;
+import org.cloud.mq.meta.api.*;
 import org.cloud.mq.meta.raft.AppendLogReq;
 import org.cloud.mq.meta.raft.AppendLogRes;
 import org.cloud.mq.meta.server.common.MetadataDefinition;
@@ -22,6 +20,7 @@ import org.cloud.mq.meta.server.raft.election.RaftStateEnum;
 import org.cloud.mq.meta.server.raft.peer.PeerWaterMark;
 
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 
 /**
  * broker server
@@ -50,6 +49,7 @@ public class BrokerMetadataServerImpl implements MetaBrokerService {
 
     @Override
     public Uni<BrokerRegisterReply> brokerRegister(BrokerRegisterRequest request) {
+        log.info("receive broker register:{}", request);
         if (electState.getState() != RaftStateEnum.LEADER) {
             // re req for leader
             ManagedChannel channel = raftClient.getChannelById(electState.getLeaderId());
@@ -67,14 +67,22 @@ public class BrokerMetadataServerImpl implements MetaBrokerService {
                 .metadataOperateEnum(MetadataOperateEnum.ADD)
                 .dataJson(GSON.toJson(request))
                 .build();
+        String json = GSON.toJson(metadataDefinition);
+        log.info("meta definition is:{}", json);
+        byte[] definitionBytes = json.getBytes(StandardCharsets.UTF_8);
+        log.info("broker register data:{}", definitionBytes);
+        ByteString bytes = ByteString.copyFrom(definitionBytes);
+        if (log.isDebugEnabled()) {
+            log.debug("leader append log data:{}", bytes);
+        }
         AppendLogRes appendLogRes = raftComponent.appendEntry(AppendLogReq.newBuilder()
-                        .setLogData(ByteString.copyFrom(GSON.toJson(metadataDefinition).getBytes(StandardCharsets.UTF_8)))
-                .build());
+                        .setLogData(bytes)
+                        .build());
         if (appendLogRes.getResult() == AppendLogRes.AppendResult.SUCCESS) {
             // wait other follower verify
-            boolean success = peerWaterMark.waitQuorum(appendLogRes.getNextIndex() - 1);
+            boolean success = peerWaterMark.waitQuorum(appendLogRes.getNextIndex());
             if (!success) {
-                success = peerWaterMark.waitQuorum(appendLogRes.getNextIndex() - 1);
+                success = peerWaterMark.waitQuorum(appendLogRes.getNextIndex());
             }
             if (!success) {
                 BrokerRegisterReply reply = BrokerRegisterReply.newBuilder()
@@ -94,6 +102,15 @@ public class BrokerMetadataServerImpl implements MetaBrokerService {
                 .setSuccess(true)
                 .build();
         return Uni.createFrom().item(reply);
+    }
+
+    @Override
+    public Uni<FindAllBrokerReply> findAllBroker(FindAllBrokerRequest request) {
+        List<Broker> brokers = brokerMetadata.findBrokerListByCluster(request.getCluster());
+        FindAllBrokerReply findAllBrokerReply = FindAllBrokerReply.newBuilder()
+                .addAllBrokerList(brokers)
+                .build();
+        return Uni.createFrom().item(findAllBrokerReply);
     }
 
 }

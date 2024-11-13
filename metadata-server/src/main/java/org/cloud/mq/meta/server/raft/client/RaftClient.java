@@ -60,7 +60,7 @@ public class RaftClient {
                     .usePlaintext()
                     .intercept(new GrpcClientInterceptor())
                     .build();
-            int id = RaftUtils.getIdByHost(null);
+            int id = RaftUtils.getIdByHost(peer);
             idChannelMapping.put(id, channel);
             channels.add(channel);
             mapping.put(channel, peer);
@@ -79,6 +79,9 @@ public class RaftClient {
      * @return res
      */
     public RaftVoteRes sendVote(ManagedChannel managedChannel, RaftVoteReq raftVoteReq) {
+        if (log.isDebugEnabled()) {
+            log.debug("sendVote for:{}, req:{}", managedChannel, raftVoteReq);
+        }
         RaftServerServiceGrpc.RaftServerServiceBlockingStub raftServerServiceBlockingStub = RaftServerServiceGrpc.newBlockingStub(managedChannel);
         return raftServerServiceBlockingStub.requestVote(raftVoteReq);
     }
@@ -90,6 +93,9 @@ public class RaftClient {
      * @return res observer
      */
     public StreamObserver<AppendLogReq> appendLog(ManagedChannel managedChannel, StreamObserver<AppendLogRes> streamObserver) {
+        if (log.isDebugEnabled()) {
+            log.debug("send log for:{}", managedChannel);
+        }
         RaftServerServiceGrpc.RaftServerServiceStub raftServerServiceStub = RaftServerServiceGrpc.newStub(managedChannel).withDeadlineAfter(2, TimeUnit.SECONDS);
         return raftServerServiceStub.appendEntries(streamObserver);
     }
@@ -101,6 +107,9 @@ public class RaftClient {
      * @return read res
      */
     public ReadIndexRes readIndex(ManagedChannel managedChannel, ReadIndexReq readIndexReq) {
+        if (log.isDebugEnabled()) {
+            log.debug("read index to :{}, req:{}", managedChannel, readIndexReq);
+        }
         RaftServerServiceGrpc.RaftServerServiceBlockingStub raftServerServiceBlockingStub = RaftServerServiceGrpc.newBlockingStub(managedChannel);
         return raftServerServiceBlockingStub.readIndex(readIndexReq);
     }

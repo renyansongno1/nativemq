@@ -81,6 +81,6 @@ message ReadIndexReq {
 // read log index response
 message ReadIndexRes {
   bool success = 1;
-  repeated bytes logDates = 2;
+  bytes logDates = 2;
   uint64 nextIndex = 3;
 }

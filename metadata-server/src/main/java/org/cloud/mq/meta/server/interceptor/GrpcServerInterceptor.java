@@ -15,19 +15,22 @@ public class GrpcServerInterceptor implements ServerInterceptor {
 
     @Override
     public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(ServerCall<ReqT, RespT> call, Metadata headers, ServerCallHandler<ReqT, RespT> next) {
-        log.info("Received request header: {}", GSON.toJson(headers));
         ServerCall.Listener<ReqT> listener = next.startCall(call, headers);
 
         return new ForwardingServerCallListener.SimpleForwardingServerCallListener<>(listener) {
             @Override
             public void onMessage(ReqT message) {
-                log.info("Received request message: {}", GSON.toJson(message));
+                if (log.isDebugEnabled()) {
+                    log.debug("Received request header:{}, message: {}", GSON.toJson(headers), GSON.toJson(message));
+                }
                 super.onMessage(message);
             }
 
             @Override
             public void onComplete() {
-                log.info("Response complete");
+                if (log.isDebugEnabled()) {
+                    log.info("Response complete");
+                }
                 super.onComplete();
             }
         };

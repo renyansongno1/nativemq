@@ -14,11 +14,11 @@ public class RaftUtils {
             if (StringUtil.isNullOrEmpty(hostname)) {
                 return 0;
             }
-            String[] hostnames = hostname.split("-");
-            return Integer.parseInt(hostnames[hostnames.length - 1]);
+            host = hostname;
         }
-        String[] hostnames = host.split("-");
-        return Integer.parseInt(hostnames[hostnames.length - 1]);
+        String[] hostnames = host.split("\\.");
+        String[] split = hostnames[0].split("-");
+        return Integer.parseInt(split[split.length - 1]);
     }
 
     public static String getMyHostName() {
@@ -27,6 +27,15 @@ public class RaftUtils {
             return "UNKNOWN";
         }
         return hostname;
+    }
+
+    /**
+     * get short host name
+     * @param host full host name
+     * @return short host name
+     */
+    public static String getShortHostName(String host) {
+        return host.split("\\.")[0];
     }
 
 }

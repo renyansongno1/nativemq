@@ -5,6 +5,7 @@ import io.quarkus.vertx.ConsumeEvent;
 import jakarta.enterprise.context.ApplicationScoped;
 import lombok.*;
 import lombok.extern.slf4j.Slf4j;
+import org.cloud.mq.meta.api.Broker;
 import org.cloud.mq.meta.api.BrokerDeleteRequest;
 import org.cloud.mq.meta.api.BrokerRegisterRequest;
 import org.cloud.mq.meta.api.BrokerUpdateRequest;
@@ -14,6 +15,7 @@ import org.cloud.mq.meta.server.common.MetadataTypeEnum;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 /**
  * broker metadata handler
@@ -39,11 +41,13 @@ public class BrokerMetadata {
     @ConsumeEvent(value = MetadataConstant.METADATA_CHANGE_TOPIC, blocking = true)
     @SuppressWarnings({"ReassignedVariable", "SynchronizationOnLocalVariableOrMethodParameter"})
     public void putBroker(MetadataDefinition metadataDefinition) {
-        if (metadataDefinition.getMetadataTypeEnum() != MetadataTypeEnum.BROKER) {
+        log.info("put broker, data:{}", metadataDefinition);
+        if (metadataDefinition == null || metadataDefinition.getMetadataTypeEnum() != MetadataTypeEnum.BROKER) {
             return;
         }
         switch (metadataDefinition.getMetadataOperateEnum()) {
             case ADD -> {
+                log.info("add broker, data:{}", metadataDefinition);
                 String dataJson = metadataDefinition.getDataJson();
                 BrokerRegisterRequest brokerRegisterRequest = GSON.fromJson(dataJson, BrokerRegisterRequest.class);
                 String cluster = brokerRegisterRequest.getCluster();
@@ -52,6 +56,7 @@ public class BrokerMetadata {
                     synchronized (this) {
                         brokerItems = BROKER_MAP.get(cluster);
                         if (brokerItems == null) {
+                            log.info("create cluster:{}", cluster);
                             brokerItems = new HashSet<>();
                             BrokerItem item = BrokerItem.builder()
                                     .cpu(brokerRegisterRequest.getCpu())
@@ -76,11 +81,24 @@ public class BrokerMetadata {
                                         .name(brokerRegisterRequest.getName())
                                         .build();
                                 brokerItems.add(item);
-                                BROKER_MAP.put(cluster, brokerItems);
                             }
                         }
                     }
+                } else {
+                    synchronized (brokerItems) {
+                        BrokerItem item = BrokerItem.builder()
+                                .cpu(brokerRegisterRequest.getCpu())
+                                .id(brokerRegisterRequest.getId())
+                                .ip(brokerRegisterRequest.getIp())
+                                .domain(brokerRegisterRequest.getDomain())
+                                .memory(brokerRegisterRequest.getMemory())
+                                .status(brokerRegisterRequest.getStatus())
+                                .name(brokerRegisterRequest.getName())
+                                .build();
+                        brokerItems.add(item);
+                    }
                 }
+                log.info("add broker res, cluster size:{}", BROKER_MAP.get(cluster).size());
             }
             case UPDATE -> {
                 String dataJson = metadataDefinition.getDataJson();
@@ -137,6 +155,26 @@ public class BrokerMetadata {
      */
     public Set<Map.Entry<String, Set<BrokerItem>>> getAllBrokerMetadata() {
         return BROKER_MAP.entrySet();
+    }
+
+    public List<Broker> findBrokerListByCluster(String cluster) {
+        Set<BrokerItem> brokerItems = BROKER_MAP.get(cluster);
+        if (brokerItems == null) {
+            return Collections.emptyList();
+        }
+        log.info("broker list: {}", brokerItems.stream()
+                .map(BrokerItem::toString)
+                .collect(Collectors.joining(", ")));
+        return brokerItems.stream().map(item -> Broker.newBuilder()
+                .setId(item.getId())
+                .setName(item.getName())
+                .setIp(item.getIp())
+                .setDomain(item.getDomain())
+                .setCpu(item.getCpu())
+                .setMemory(item.getMemory())
+                .setStatus(item.getStatus())
+                .setCluster(cluster)
+                .build()).collect(Collectors.toList());
     }
 
     /**
